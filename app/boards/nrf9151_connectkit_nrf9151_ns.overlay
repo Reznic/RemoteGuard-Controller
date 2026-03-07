@@ -33,7 +33,7 @@
 
 	esp32cam: esp32cam@0 {
 		status = "okay";
-		compatible = "esp32,cam-spi";
+		compatible = "esp32cam";
 		reg = <0>;
 		spi-max-frequency = <8000000>;
 		spi-cpol;
