@@ -56,6 +56,14 @@ config MQTT_SAMPLE_TRANSPORT_SUBSCRIBE_TOPIC
 	string "MQTT subscribe topic"
 	default "my/subscribe/topic"
 
+config MQTT_GPS_CMD_TOPIC
+	string "MQTT gps commands subscribe topic"
+	default "device/get_gps"
+
+config MQTT_GPS_DATA_TOPIC
+	string "MQTT gps data publish topic"
+	default "device/gps"
+
 module = MQTT_SAMPLE_TRANSPORT
 module-str = Transport
 source "subsys/logging/Kconfig.template.log_config"

@@ -23,6 +23,7 @@ ZBUS_SUBSCRIBER_DEFINE(transport, CONFIG_MQTT_SAMPLE_TRANSPORT_MESSAGE_QUEUE_SIZ
 
 /* ID for subscribe topic - Used to verify that a subscription succeeded in on_mqtt_suback(). */
 #define SUBSCRIBE_TOPIC_ID 2469
+#define GET_GPS_TOPIC_ID 2470
 
 /* Forward declarations */
 static const struct smf_state state[];
@@ -47,6 +48,8 @@ static char client_id[CONFIG_MQTT_SAMPLE_TRANSPORT_CLIENT_ID_BUFFER_SIZE];
 
 static uint8_t pub_topic[sizeof(client_id) + sizeof(CONFIG_MQTT_SAMPLE_TRANSPORT_PUBLISH_TOPIC)];
 static uint8_t sub_topic[sizeof(client_id) + sizeof(CONFIG_MQTT_SAMPLE_TRANSPORT_SUBSCRIBE_TOPIC)];
+static uint8_t get_gps_topic[sizeof(client_id) + sizeof(CONFIG_MQTT_GPS_CMD_TOPIC)];
+static uint8_t gps_pub_topic[sizeof(client_id) + sizeof(CONFIG_MQTT_GPS_DATA_TOPIC)];
 
 /* User defined state object.
  * Used to transfer data between state changes.
@@ -90,10 +93,30 @@ static bool payload_matches(const struct mqtt_helper_buf *payload, const char *s
 	return (payload->size == str_len) && (strncmp(payload->ptr, str, str_len) == 0);
 }
 
+/* Helper function to check if topic matches a string */
+static bool topic_matches(const struct mqtt_helper_buf *topic, const char *str)
+{
+	size_t str_len = strlen(str);
+	return (topic->size == str_len) && (strncmp(topic->ptr, str, str_len) == 0);
+}
+
 static void on_mqtt_publish(struct mqtt_helper_buf topic, struct mqtt_helper_buf payload)
 {
 	enum camera_cmd cmd;
+	enum gnss_cmd gnss_cmd;
 	int err;
+
+	/* Check for GPS location request */
+	if (topic_matches(&topic, (char *)get_gps_topic)) {
+		gnss_cmd = GNSS_CMD_GET_LOCATION;
+		err = zbus_chan_pub(&GNSS_CMD_CHAN, &gnss_cmd, K_SECONDS(1));
+		if (err) {
+			LOG_ERR("Failed to publish GNSS command: %d", err);
+		} else {
+			LOG_INF("Published get_location command to GNSS");
+		}
+		return;
+	}
 
 	/* Check for camera commands */
 	if (payload_matches(&payload, "take_photo")) {
@@ -157,7 +180,9 @@ static void on_mqtt_publish(struct mqtt_helper_buf topic, struct mqtt_helper_buf
 static void on_mqtt_suback(uint16_t message_id, int result)
 {
 	if ((message_id == SUBSCRIBE_TOPIC_ID) && (result == 0)) {
-		LOG_INF("Subscribed to topic %s", sub_topic);
+		LOG_INF("Subscribed to payload topic");
+	} else if ((message_id == GET_GPS_TOPIC_ID) && (result == 0)) {
+		LOG_INF("Subscribed to GPS topic");
 	} else if (result) {
 		LOG_ERR("Topic subscription failed, error: %d", result);
 	} else {
@@ -183,6 +208,18 @@ static int topics_prefix(void)
 		       CONFIG_MQTT_SAMPLE_TRANSPORT_SUBSCRIBE_TOPIC);
 	if ((len < 0) || (len >= sizeof(sub_topic))) {
 		LOG_ERR("Subscribe topic buffer too small");
+		return -EMSGSIZE;
+	}
+
+	len = snprintk(get_gps_topic, sizeof(get_gps_topic), "%s/%s", client_id, CONFIG_MQTT_GPS_CMD_TOPIC);
+	if ((len < 0) || (len >= sizeof(get_gps_topic))) {
+		LOG_ERR("Get GPS topic buffer too small");
+		return -EMSGSIZE;
+	}
+
+	len = snprintk(gps_pub_topic, sizeof(gps_pub_topic), "%s/%s", client_id, CONFIG_MQTT_GPS_DATA_TOPIC);
+	if ((len < 0) || (len >= sizeof(gps_pub_topic))) {
+		LOG_ERR("GPS publish topic buffer too small");
 		return -EMSGSIZE;
 	}
 
@@ -295,6 +332,106 @@ static void publish_camera_chunk(struct camera_chunk *chunk)
 	}
 }
 
+/* Publish GPS data over MQTT */
+static void publish_gps_data(struct gps_data *gps)
+{
+	int err;
+	char gps_json[128];
+	int len;
+
+	len = snprintk(gps_json, sizeof(gps_json),
+			"{\"lat\":%.6f,\"lon\":%.6f,\"accuracy\":%.1f}",
+			gps->latitude, gps->longitude, gps->accuracy);
+	if (len < 0 || len >= sizeof(gps_json)) {
+		LOG_ERR("GPS JSON buffer too small");
+		return;
+	}
+
+	struct mqtt_publish_param param = {
+		.message.payload.data = (uint8_t *)gps_json,
+		.message.payload.len = len,
+		.message.topic.qos = MQTT_QOS_1_AT_LEAST_ONCE,
+		.message_id = mqtt_helper_msg_id_get(),
+		.message.topic.topic.utf8 = gps_pub_topic,
+		.message.topic.topic.size = strlen(gps_pub_topic),
+	};
+
+	err = mqtt_helper_publish(&param);
+	if (err) {
+		LOG_ERR("Failed to publish GPS data, err: %d", err);
+		return;
+	}
+
+	LOG_INF("Published GPS data: %s", gps_json);
+}
+
+/* Publish GPS error over MQTT */
+static void publish_gps_error(enum gnss_error_type error)
+{
+	int err;
+	static char error_topic[sizeof(client_id) + 32];
+	const char *error_str;
+
+	switch (error) {
+	case GNSS_ERROR_NRF_INTERNAL:
+		error_str = "nrf_internal_error";
+		break;
+	case GNSS_ERROR_INIT_FAILED:
+		error_str = "gnss_init_failed";
+		break;
+	case GNSS_ERROR_ACTIVATION_FAILED:
+		error_str = "gnss_activation_failed";
+		break;
+	case GNSS_ERROR_EVENT_HANDLER_FAILED:
+		error_str = "gnss_event_handler_failed";
+		break;
+	case GNSS_ERROR_CONFIG_FAILED:
+		error_str = "gnss_config_failed";
+		break;
+	case GNSS_ERROR_START_FAILED:
+		error_str = "gnss_start_failed";
+		break;
+	case GNSS_ERROR_STOP_FAILED:
+		error_str = "gnss_stop_failed";
+		break;
+	case GNSS_ERROR_TIMEOUT:
+		error_str = "gnss_timeout";
+		break;
+	case GNSS_ERROR_INVALID_FIX:
+		error_str = "gnss_invalid_fix";
+		break;
+	case GNSS_ERROR_PVT_READ_FAILED:
+		error_str = "gnss_pvt_read_failed";
+		break;
+	default:
+		error_str = "unknown";
+		break;
+	}
+
+	int len = snprintk(error_topic, sizeof(error_topic), "%s/device/gps/error", client_id);
+	if (len < 0 || len >= sizeof(error_topic)) {
+		LOG_ERR("GPS error topic buffer too small");
+		return;
+	}
+
+	struct mqtt_publish_param param = {
+		.message.payload.data = (uint8_t *)error_str,
+		.message.payload.len = strlen(error_str),
+		.message.topic.qos = MQTT_QOS_1_AT_LEAST_ONCE,
+		.message_id = mqtt_helper_msg_id_get(),
+		.message.topic.topic.utf8 = error_topic,
+		.message.topic.topic.size = strlen(error_topic),
+	};
+
+	err = mqtt_helper_publish(&param);
+	if (err) {
+		LOG_ERR("Failed to publish GPS error, err: %d", err);
+		return;
+	}
+
+	LOG_INF("Published GPS error: %s", error_str);
+}
+
 /* Publish camera error over MQTT */
 static void publish_camera_error(enum camera_error_type error)
 {
@@ -345,6 +482,7 @@ static void subscribe(void)
 {
 	int err;
 
+	/* Subscribe to main topic */
 	struct mqtt_topic topics[] = {
 		{
 			.topic.utf8 = sub_topic,
@@ -357,13 +495,30 @@ static void subscribe(void)
 		.message_id = SUBSCRIBE_TOPIC_ID,
 	};
 
-	for (size_t i = 0; i < list.list_count; i++) {
-		LOG_INF("Subscribing to: %s", (char *)list.list[i].topic.utf8);
-	}
-
+	LOG_INF("Subscribing to: %s", (char *)list.list[0].topic.utf8);
 	err = mqtt_helper_subscribe(&list);
 	if (err) {
 		LOG_ERR("Failed to subscribe to topics, error: %d", err);
+		return;
+	}
+
+	/* Subscribe to GPS topic */
+	struct mqtt_topic gps_topics[] = {
+		{
+			.topic.utf8 = get_gps_topic,
+			.topic.size = strlen(get_gps_topic),
+		},
+	};
+	struct mqtt_subscription_list gps_list = {
+		.list = gps_topics,
+		.list_count = ARRAY_SIZE(gps_topics),
+		.message_id = GET_GPS_TOPIC_ID,
+	};
+
+	LOG_INF("Subscribing to: %s", (char *)gps_list.list[0].topic.utf8);
+	err = mqtt_helper_subscribe(&gps_list);
+	if (err) {
+		LOG_ERR("Failed to subscribe to GPS topic, error: %d", err);
 		return;
 	}
 }
@@ -592,6 +747,42 @@ static void transport_task(void)
 			if (s_obj.status == NETWORK_CONNECTED ) {
 			    // && smf_get_current_leaf_state(SMF_CTX(&s_obj)) == &state[MQTT_CONNECTED]) {
 				publish_camera_error(error);
+			}
+			continue;
+		}
+
+		else if (&GPS_DATA_CHAN == chan) {
+			struct gps_data gps;
+
+			err = zbus_chan_read(&GPS_DATA_CHAN, &gps, K_SECONDS(1));
+			if (err) {
+				LOG_ERR("zbus_chan_read, error: %d", err);
+				SEND_FATAL_ERROR();
+				continue;
+			}
+
+			/* Only publish if MQTT is connected */
+			if (s_obj.status == NETWORK_CONNECTED ) {
+			    // && smf_get_current_leaf_state(SMF_CTX(&s_obj)) == &state[MQTT_CONNECTED]) {
+				publish_gps_data(&gps);
+			}
+			continue;
+		}
+
+		else if (&GNSS_ERROR_CHAN == chan) {
+			enum gnss_error_type error;
+
+			err = zbus_chan_read(&GNSS_ERROR_CHAN, &error, K_SECONDS(1));
+			if (err) {
+				LOG_ERR("zbus_chan_read, error: %d", err);
+				SEND_FATAL_ERROR();
+				continue;
+			}
+
+			/* Only publish if MQTT is connected */
+			if (s_obj.status == NETWORK_CONNECTED ) {
+			    // && smf_get_current_leaf_state(SMF_CTX(&s_obj)) == &state[MQTT_CONNECTED]) {
+				publish_gps_error(error);
 			}
 			continue;
 		}

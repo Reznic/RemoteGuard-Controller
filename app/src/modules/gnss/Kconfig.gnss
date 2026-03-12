@@ -1,0 +1,38 @@
+#
+# Copyright (c) 2023 Nordic Semiconductor ASA
+#
+# SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+#
+
+menuconfig MQTT_SAMPLE_GNSS
+	bool "Enable GNSS module"
+	default y
+	help
+	  Enable the GNSS module for GPS location tracking.
+
+if MQTT_SAMPLE_GNSS
+
+config MQTT_SAMPLE_GNSS_THREAD_STACK_SIZE
+	int "GNSS module thread stack size"
+	default 4096
+	help
+	  Stack size for the GNSS module thread.
+
+config MQTT_SAMPLE_GNSS_MESSAGE_QUEUE_SIZE
+	int "GNSS module message queue size"
+	default 10
+	help
+	  Size of the message queue for the GNSS module.
+
+config MQTT_SAMPLE_GNSS_FIX_TIMEOUT
+	int "GNSS fix timeout in seconds"
+	default 120
+	range 10 600
+	help
+	  Maximum time to wait for a GPS fix before timing out.
+
+endif # MQTT_SAMPLE_GNSS
+
+module = MQTT_SAMPLE_GNSS
+module-str = GNSS
+source "subsys/logging/Kconfig.template.log_config"

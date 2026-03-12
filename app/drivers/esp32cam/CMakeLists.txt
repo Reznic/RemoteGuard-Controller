@@ -2,9 +2,9 @@
 # ESP32-CAM custom SPI camera driver
 #
 
+if(CONFIG_ESP32CAM_DRIVER)
 zephyr_library()
-zephyr_library_sources(esp32cam.c)
 zephyr_include_directories(.)
-
-target_sources(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/esp32cam.c)
+zephyr_library_sources(esp32cam.c)
+endif()
 
