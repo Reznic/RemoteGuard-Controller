@@ -4,11 +4,14 @@
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
+#include <errno.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
+#include <zephyr/sys/atomic.h>
 #include <zephyr/zbus/zbus.h>
 #include <zephyr/smf.h>
-#include <net/mqtt_helper.h>
+#include <net/mqtt_client.h>
+#include <zephyr/net/mqtt.h>
 #include <stdbool.h>
 #include <string.h>
 
@@ -35,7 +38,7 @@ static K_WORK_DELAYABLE_DEFINE(connect_work, connect_work_fn);
 /* Define stack_area of application workqueue */
 K_THREAD_STACK_DEFINE(stack_area, CONFIG_MQTT_SAMPLE_TRANSPORT_WORKQUEUE_STACK_SIZE);
 
-/* Declare application workqueue. This workqueue is used to call mqtt_helper_connect(), and
+/* Declare application workqueue. This workqueue is used to call mqtt_client_connect(), and
  * schedule reconnectionn attempts upon network loss or disconnection from MQTT.
  */
 static struct k_work_q transport_queue;
@@ -50,6 +53,11 @@ static uint8_t pub_topic[sizeof(client_id) + sizeof(CONFIG_MQTT_SAMPLE_TRANSPORT
 static uint8_t sub_topic[sizeof(client_id) + sizeof(CONFIG_MQTT_SAMPLE_TRANSPORT_SUBSCRIBE_TOPIC)];
 static uint8_t get_gps_topic[sizeof(client_id) + sizeof(CONFIG_MQTT_GPS_CMD_TOPIC)];
 static uint8_t gps_pub_topic[sizeof(client_id) + sizeof(CONFIG_MQTT_GPS_DATA_TOPIC)];
+#if defined(CONFIG_MQTT_CLIENT_LAST_WILL)
+static uint8_t lwt_topic[sizeof(client_id) + sizeof(CONFIG_MQTT_CLIENT_LAST_WILL_TOPIC) + 2];
+#endif
+
+static atomic_t transport_mqtt_connected = ATOMIC_INIT(0);
 
 /* User defined state object.
  * Used to transfer data between state changes.
@@ -68,39 +76,74 @@ static struct s_object {
 	struct payload payload;
 } s_obj;
 
-/* Callback handlers from MQTT helper library.
+/* Callback handlers from local mqtt_client library.
  * The functions are called whenever specific MQTT packets are received from the broker, or
  * some library state has changed.
  */
+static const char *mqtt_connack_reason_str(enum mqtt_conn_return_code rc)
+{
+	switch (rc) {
+	case MQTT_CONNECTION_ACCEPTED:
+		return "connection accepted";
+	case MQTT_UNACCEPTABLE_PROTOCOL_VERSION:
+		return "unacceptable protocol version";
+	case MQTT_IDENTIFIER_REJECTED:
+		return "client identifier rejected";
+	case MQTT_SERVER_UNAVAILABLE:
+		return "server unavailable";
+	case MQTT_BAD_USER_NAME_OR_PASSWORD:
+		return "bad user name or password";
+	case MQTT_NOT_AUTHORIZED:
+		return "not authorized";
+	default:
+		return "unknown CONNACK code";
+	}
+}
+
 static void on_mqtt_connack(enum mqtt_conn_return_code return_code, bool session_present)
 {
-	ARG_UNUSED(return_code);
-
-	smf_set_state(SMF_CTX(&s_obj), &state[MQTT_CONNECTED]);
+	if (return_code == MQTT_CONNECTION_ACCEPTED) {
+		LOG_INF("MQTT CONNACK: %s (session_present=%d)",
+			mqtt_connack_reason_str(return_code), session_present);
+		atomic_set(&transport_mqtt_connected, 1);
+		smf_set_state(SMF_CTX(&s_obj), &state[MQTT_CONNECTED]);
+	} else {
+		LOG_ERR("MQTT CONNACK refused: %s (0x%02x), session_present=%d",
+			mqtt_connack_reason_str(return_code), return_code, session_present);
+		atomic_set(&transport_mqtt_connected, 0);
+		smf_set_state(SMF_CTX(&s_obj), &state[MQTT_DISCONNECTED]);
+	}
 }
 
 static void on_mqtt_disconnect(int result)
 {
-	ARG_UNUSED(result);
-
+	atomic_set(&transport_mqtt_connected, 0);
 	smf_set_state(SMF_CTX(&s_obj), &state[MQTT_DISCONNECTED]);
+
+	if (result == 0) {
+		LOG_INF("MQTT disconnected after clean DISCONNECT");
+	} else if (result == -ECONNABORTED) {
+		LOG_WRN("MQTT disconnected (aborted), result=%d", result);
+	} else {
+		LOG_WRN("MQTT disconnected unexpectedly, result=%d", result);
+	}
 }
 
 /* Helper function to check if payload matches a string exactly */
-static bool payload_matches(const struct mqtt_helper_buf *payload, const char *str)
+static bool payload_matches(const struct mqtt_client_buf *payload, const char *str)
 {
 	size_t str_len = strlen(str);
 	return (payload->size == str_len) && (strncmp(payload->ptr, str, str_len) == 0);
 }
 
 /* Helper function to check if topic matches a string */
-static bool topic_matches(const struct mqtt_helper_buf *topic, const char *str)
+static bool topic_matches(const struct mqtt_client_buf *topic, const char *str)
 {
 	size_t str_len = strlen(str);
 	return (topic->size == str_len) && (strncmp(topic->ptr, str, str_len) == 0);
 }
 
-static void on_mqtt_publish(struct mqtt_helper_buf topic, struct mqtt_helper_buf payload)
+static void on_mqtt_publish(struct mqtt_client_buf topic, struct mqtt_client_buf payload)
 {
 	enum camera_cmd cmd;
 	enum gnss_cmd gnss_cmd;
@@ -223,6 +266,15 @@ static int topics_prefix(void)
 		return -EMSGSIZE;
 	}
 
+#if defined(CONFIG_MQTT_CLIENT_LAST_WILL)
+	len = snprintk(lwt_topic, sizeof(lwt_topic), "%s/%s", client_id,
+		       CONFIG_MQTT_CLIENT_LAST_WILL_TOPIC);
+	if ((len < 0) || (len >= sizeof(lwt_topic))) {
+		LOG_ERR("LWT topic buffer too small");
+		return -EMSGSIZE;
+	}
+#endif
+
 	return 0;
 }
 
@@ -234,12 +286,12 @@ static void publish(struct payload *payload)
 		.message.payload.data = payload->string,
 		.message.payload.len = strlen(payload->string),
 		.message.topic.qos = MQTT_QOS_1_AT_LEAST_ONCE,
-		.message_id = mqtt_helper_msg_id_get(),
+		.message_id = mqtt_client_msg_id_get(),
 		.message.topic.topic.utf8 = pub_topic,
 		.message.topic.topic.size = strlen(pub_topic),
 	};
 
-	err = mqtt_helper_publish(&param);
+	err = mqtt_client_publish(&param);
 	if (err) {
 		LOG_WRN("Failed to send payload, err: %d", err);
 		return;
@@ -283,12 +335,12 @@ static void publish_camera_chunk(struct camera_chunk *chunk)
 			.message.payload.data = meta_buf,
 			.message.payload.len = len,
 			.message.topic.qos = MQTT_QOS_1_AT_LEAST_ONCE,
-			.message_id = mqtt_helper_msg_id_get(),
+			.message_id = mqtt_client_msg_id_get(),
 			.message.topic.topic.utf8 = photo_meta_topic,
 			.message.topic.topic.size = strlen(photo_meta_topic),
 		};
 
-		err = mqtt_helper_publish(&meta_param);
+		err = mqtt_client_publish(&meta_param);
 		if (err) {
 			LOG_ERR("Failed to publish photo meta, err: %d", err);
 			return;
@@ -310,12 +362,12 @@ static void publish_camera_chunk(struct camera_chunk *chunk)
 		.message.payload.data = chunk->data,
 		.message.payload.len = chunk->size,
 		.message.topic.qos = MQTT_QOS_1_AT_LEAST_ONCE,
-		.message_id = mqtt_helper_msg_id_get(),
+		.message_id = mqtt_client_msg_id_get(),
 		.message.topic.topic.utf8 = photo_chunk_topic,
 		.message.topic.topic.size = strlen(photo_chunk_topic),
 	};
 
-	err = mqtt_helper_publish(&chunk_param);
+	err = mqtt_client_publish(&chunk_param);
 	if (err) {
 		LOG_ERR("Failed to publish photo chunk %u, err: %d", chunk->sequence, err);
 		return;
@@ -351,12 +403,12 @@ static void publish_gps_data(struct gps_data *gps)
 		.message.payload.data = (uint8_t *)gps_json,
 		.message.payload.len = len,
 		.message.topic.qos = MQTT_QOS_1_AT_LEAST_ONCE,
-		.message_id = mqtt_helper_msg_id_get(),
+		.message_id = mqtt_client_msg_id_get(),
 		.message.topic.topic.utf8 = gps_pub_topic,
 		.message.topic.topic.size = strlen(gps_pub_topic),
 	};
 
-	err = mqtt_helper_publish(&param);
+	err = mqtt_client_publish(&param);
 	if (err) {
 		LOG_ERR("Failed to publish GPS data, err: %d", err);
 		return;
@@ -418,12 +470,12 @@ static void publish_gps_error(enum gnss_error_type error)
 		.message.payload.data = (uint8_t *)error_str,
 		.message.payload.len = strlen(error_str),
 		.message.topic.qos = MQTT_QOS_1_AT_LEAST_ONCE,
-		.message_id = mqtt_helper_msg_id_get(),
+		.message_id = mqtt_client_msg_id_get(),
 		.message.topic.topic.utf8 = error_topic,
 		.message.topic.topic.size = strlen(error_topic),
 	};
 
-	err = mqtt_helper_publish(&param);
+	err = mqtt_client_publish(&param);
 	if (err) {
 		LOG_ERR("Failed to publish GPS error, err: %d", err);
 		return;
@@ -464,12 +516,12 @@ static void publish_camera_error(enum camera_error_type error)
 		.message.payload.data = (uint8_t *)error_str,
 		.message.payload.len = strlen(error_str),
 		.message.topic.qos = MQTT_QOS_1_AT_LEAST_ONCE,
-		.message_id = mqtt_helper_msg_id_get(),
+		.message_id = mqtt_client_msg_id_get(),
 		.message.topic.topic.utf8 = error_topic,
 		.message.topic.topic.size = strlen(error_topic),
 	};
 
-	err = mqtt_helper_publish(&param);
+	err = mqtt_client_publish(&param);
 	if (err) {
 		LOG_ERR("Failed to publish camera error, err: %d", err);
 		return;
@@ -496,7 +548,7 @@ static void subscribe(void)
 	};
 
 	LOG_INF("Subscribing to: %s", (char *)list.list[0].topic.utf8);
-	err = mqtt_helper_subscribe(&list);
+	err = mqtt_client_subscribe(&list);
 	if (err) {
 		LOG_ERR("Failed to subscribe to topics, error: %d", err);
 		return;
@@ -516,7 +568,7 @@ static void subscribe(void)
 	};
 
 	LOG_INF("Subscribing to: %s", (char *)gps_list.list[0].topic.utf8);
-	err = mqtt_helper_subscribe(&gps_list);
+	err = mqtt_client_subscribe(&gps_list);
 	if (err) {
 		LOG_ERR("Failed to subscribe to GPS topic, error: %d", err);
 		return;
@@ -531,7 +583,7 @@ static void connect_work_fn(struct k_work *work)
 	ARG_UNUSED(work);
 
 	int err;
-	struct mqtt_helper_conn_params conn_params = {
+	struct mqtt_client_conn_params conn_params = {
 		.hostname.ptr = CONFIG_MQTT_SAMPLE_TRANSPORT_BROKER_HOSTNAME,
 		.hostname.size = strlen(CONFIG_MQTT_SAMPLE_TRANSPORT_BROKER_HOSTNAME),
 		.device_id.ptr = client_id,
@@ -552,7 +604,7 @@ static void connect_work_fn(struct k_work *work)
 		return;
 	}
 
-	err = mqtt_helper_connect(&conn_params);
+	err = mqtt_client_connect(&conn_params);
 	if (err) {
 		LOG_ERR("Failed connecting to MQTT, error code: %d", err);
 	}
@@ -604,7 +656,7 @@ static void connected_entry(void *o)
 	LOG_INF("Connected to MQTT broker");
 	LOG_INF("Hostname: %s", CONFIG_MQTT_SAMPLE_TRANSPORT_BROKER_HOSTNAME);
 	LOG_INF("Client ID: %s", client_id);
-	LOG_INF("Port: %d", CONFIG_MQTT_HELPER_PORT);
+	LOG_INF("Port: %d", CONFIG_MQTT_CLIENT_PORT);
 	LOG_INF("TLS: %s", IS_ENABLED(CONFIG_MQTT_LIB_TLS) ? "Yes" : "No");
 
 	ARG_UNUSED(o);
@@ -625,7 +677,7 @@ static void connected_run(void *o)
 		 * This is to cleanup any internal library state.
 		 * The call to this function will cause on_mqtt_disconnect() to be called.
 		 */
-		(void)mqtt_helper_disconnect();
+		(void)mqtt_client_disconnect();
 		return;
 	}
 
@@ -658,7 +710,7 @@ static void transport_task(void)
 	const struct zbus_channel *chan;
 	enum network_status status;
 	struct payload payload;
-	struct mqtt_helper_cfg cfg = {
+	struct mqtt_client_cfg cfg = {
 		.cb = {
 			.on_connack = on_mqtt_connack,
 			.on_disconnect = on_mqtt_disconnect,
@@ -677,9 +729,9 @@ static void transport_task(void)
 			   K_HIGHEST_APPLICATION_THREAD_PRIO,
 			   NULL);
 
-	err = mqtt_helper_init(&cfg);
+	err = mqtt_client_lib_init(&cfg);
 	if (err) {
-		LOG_ERR("mqtt_helper_init, error: %d", err);
+		LOG_ERR("mqtt_client_lib_init, error: %d", err);
 		SEND_FATAL_ERROR();
 		return;
 	}
@@ -795,6 +847,50 @@ static void transport_task(void)
 		}
 	}
 }
+
+#if defined(CONFIG_MQTT_CLIENT_LAST_WILL)
+int transport_mqtt_clean_offline(void)
+{
+	static const char payload[] = "offline_clean";
+	int err;
+
+	if (atomic_get(&transport_mqtt_connected) == 0) {
+		LOG_WRN("MQTT not connected; cannot publish clean LWT");
+		return -ENOTCONN;
+	}
+
+	struct mqtt_publish_param param = {
+		.message.payload.data = (uint8_t *)payload,
+		.message.payload.len = sizeof(payload) - 1,
+		.message.topic.qos = MQTT_QOS_1_AT_LEAST_ONCE,
+		.message_id = mqtt_client_msg_id_get(),
+		.message.topic.topic.utf8 = lwt_topic,
+		.message.topic.topic.size = strlen(lwt_topic),
+		.dup_flag = 0,
+		.retain_flag = 1,
+	};
+
+	err = mqtt_client_publish(&param);
+	if (err) {
+		LOG_ERR("Failed to publish offline_clean: %d", err);
+		return err;
+	}
+
+	err = mqtt_client_disconnect();
+	if (err) {
+		LOG_ERR("mqtt_client_disconnect failed: %d", err);
+		return err;
+	}
+
+	LOG_INF("Published offline_clean on LWT topic; disconnected");
+	return 0;
+}
+#else
+int transport_mqtt_clean_offline(void)
+{
+	return -ENOTSUP;
+}
+#endif
 
 K_THREAD_DEFINE(transport_task_id,
 		CONFIG_MQTT_SAMPLE_TRANSPORT_THREAD_STACK_SIZE,
