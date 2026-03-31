@@ -578,12 +578,6 @@ static void connect_work_fn(struct k_work *work)
 	ARG_UNUSED(work);
 
 	int err;
-	struct mqtt_client_conn_params conn_params = {
-		.hostname.ptr = CONFIG_MQTT_SAMPLE_TRANSPORT_BROKER_HOSTNAME,
-		.hostname.size = strlen(CONFIG_MQTT_SAMPLE_TRANSPORT_BROKER_HOSTNAME),
-		.device_id.ptr = client_id,
-		.device_id.size = strlen(client_id),
-	};
 
 	err = client_id_get(client_id, sizeof(client_id));
 	if (err) {
@@ -598,6 +592,13 @@ static void connect_work_fn(struct k_work *work)
 		SEND_FATAL_ERROR();
 		return;
 	}
+
+	struct mqtt_client_conn_params conn_params = {
+		.hostname.ptr = CONFIG_MQTT_SAMPLE_TRANSPORT_BROKER_HOSTNAME,
+		.hostname.size = strlen(CONFIG_MQTT_SAMPLE_TRANSPORT_BROKER_HOSTNAME),
+		.device_id.ptr = client_id,
+		.device_id.size = strlen(client_id),
+	};
 
 	err = mqtt_client_connect(&conn_params);
 	if (err) {
