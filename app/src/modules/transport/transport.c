@@ -1,9 +1,3 @@
-/*
- * Copyright (c) 2023 Nordic Semiconductor ASA
- *
- * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
- */
-
 #include <errno.h>
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
@@ -17,6 +11,7 @@
 
 #include "client_id.h"
 #include "message_channel.h"
+#include "transport.h"
 
 /* Register log module */
 LOG_MODULE_REGISTER(transport, CONFIG_APP_LOG_LEVEL);
