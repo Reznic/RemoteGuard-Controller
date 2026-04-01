@@ -4,9 +4,8 @@ name: Twister Apps & Samples
 on:
   push:
     paths:
-      - 'applications/**'
+      - 'app/**'
       - 'boards/**'
-      - 'samples/**'
       - 'zephyr/**'
       - 'CMakeLists.txt'
       - 'Kconfig'
@@ -37,14 +36,14 @@ jobs:
           app-path: nrf9151-connectkit
           toolchains: arm-zephyr-eabi
 
-      - name: Twister Applications
+      - name: Twister Application
         working-directory: nrf9151-connectkit
         shell: bash
         run: |
-          west twister -T applications -v --inline-logs --integration
+          west twister -T app -v --inline-logs --integration
 
-      - name: Twister Samples
-        working-directory: nrf9151-connectkit
-        shell: bash
-        run: |
-          west twister -T samples -v --inline-logs --integration
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: connectkit-firmware
+          path: build/**/*.hex
