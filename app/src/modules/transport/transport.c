@@ -388,7 +388,7 @@ static void publish_gps_data(struct gps_data *gps)
 
 	len = snprintk(gps_json, sizeof(gps_json),
 			"{\"lat\":%.6f,\"lon\":%.6f,\"accuracy\":%.1f}",
-			gps->latitude, gps->longitude, gps->accuracy);
+			(double)gps->latitude, (double)gps->longitude, (double)gps->accuracy);
 	if (len < 0 || len >= sizeof(gps_json)) {
 		LOG_ERR("GPS JSON buffer too small");
 		return;
