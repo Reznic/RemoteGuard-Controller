@@ -228,10 +228,7 @@ static int handle_get_location(void)
 	gps.longitude = last_pvt.longitude;
 	gps.accuracy = (float)last_pvt.accuracy;
 
-	LOG_INF("GPS fix obtained: lat=%d.%06d, lon=%d.%06d, accuracy=%d.%01d m",
-		(int)gps.latitude, abs((int)(gps.latitude * 1000000) % 1000000),
-		(int)gps.longitude, abs((int)(gps.longitude * 1000000) % 1000000),
-		(int)gps.accuracy, abs((int)(gps.accuracy * 10) % 10));
+	LOG_INF("GPS fix obtained");
 
 	/* Stop GNSS to save power */
 	gnss_stop();
