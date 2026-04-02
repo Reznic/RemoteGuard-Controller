@@ -25,10 +25,10 @@ ZBUS_SUBSCRIBER_DEFINE(transport, CONFIG_MQTT_SAMPLE_TRANSPORT_MESSAGE_QUEUE_SIZ
 
 /* Forward declarations */
 static const struct smf_state state[];
-static void connect_work_fn(struct k_work *work);
+static void mqtt_connect_work_fn(struct k_work *work);
 
 /* Define connection work - Used to handle reconnection attempts to the MQTT broker */
-static K_WORK_DELAYABLE_DEFINE(connect_work, connect_work_fn);
+static K_WORK_DELAYABLE_DEFINE(mqtt_connect_work, mqtt_connect_work_fn);
 
 /* Define stack_area of application workqueue */
 K_THREAD_STACK_DEFINE(stack_area, CONFIG_MQTT_SAMPLE_TRANSPORT_WORKQUEUE_STACK_SIZE);
@@ -54,6 +54,18 @@ static uint8_t lwt_topic[sizeof(client_id) + sizeof(CONFIG_MQTT_CLIENT_LAST_WILL
 
 static atomic_t transport_mqtt_connected = ATOMIC_INIT(0);
 
+static uint8_t mqtt_broker_reconnect_failures = 0U;
+static void retry_connect_to_broker()
+{
+	if (mqtt_broker_reconnect_failures >= CONFIG_MQTT_SAMPLE_TRANSPORT_RECONNECT_MAX_ATTEMPTS) {
+		LOG_ERR("Failed to connect to MQTT broker. Max failed attempts reached, giving up");
+		return;
+	}
+	mqtt_broker_reconnect_failures++;
+	LOG_INF("Retrying connecting to mqtt broker");
+	k_work_reschedule_for_queue(&transport_queue, &mqtt_connect_work, K_SECONDS(CONFIG_MQTT_SAMPLE_TRANSPORT_RECONNECTION_TIMEOUT_SECONDS));
+}
+
 /* User defined state object.
  * Used to transfer data between state changes.
  */
@@ -65,7 +77,7 @@ static struct s_object {
 	const struct zbus_channel *chan;
 
 	/* Network status */
-	enum network_status status;
+	enum network_status network_connection_status;
 
 	/* Payload */
 	struct payload payload;
@@ -98,6 +110,7 @@ static const char *mqtt_connack_reason_str(enum mqtt_conn_return_code rc)
 static void on_mqtt_connack(enum mqtt_conn_return_code return_code, bool session_present)
 {
 	if (return_code == MQTT_CONNECTION_ACCEPTED) {
+		mqtt_broker_reconnect_failures = 0U;
 		LOG_INF("MQTT CONNACK: %s (session_present=%d)",
 			mqtt_connack_reason_str(return_code), session_present);
 		atomic_set(&transport_mqtt_connected, 1);
@@ -107,6 +120,10 @@ static void on_mqtt_connack(enum mqtt_conn_return_code return_code, bool session
 			mqtt_connack_reason_str(return_code), return_code, session_present);
 		atomic_set(&transport_mqtt_connected, 0);
 		smf_set_state(SMF_CTX(&s_obj), &state[MQTT_DISCONNECTED]);
+		/* Still in MQTT_DISCONNECTED from before CONNECT; SMF entry does not run again. */
+		if (s_obj.network_connection_status == NETWORK_CONNECTED) {
+			retry_connect_to_broker();
+		}
 	}
 }
 
@@ -217,14 +234,19 @@ static void on_mqtt_publish(struct mqtt_client_buf topic, struct mqtt_client_buf
 
 static void on_mqtt_suback(uint16_t message_id, int result)
 {
-	if ((message_id == SUBSCRIBE_TOPIC_ID) && (result == 0)) {
-		LOG_INF("Subscribed to payload topic");
-	} else if ((message_id == GET_GPS_TOPIC_ID) && (result == 0)) {
-		LOG_INF("Subscribed to GPS topic");
-	} else if (result) {
-		LOG_ERR("Topic subscription failed, error: %d", result);
-	} else {
-		LOG_WRN("Subscribed to unknown topic, id: %d", message_id);
+	if (result != 0) {
+		LOG_ERR("MQTT Topic subscription failed, error: %d, topic id: %d", result, message_id);
+		return;
+	}
+	switch (message_id) {
+	case SUBSCRIBE_TOPIC_ID:
+		LOG_INF("MQTT Subscribed to payload topic");
+		break;
+	case GET_GPS_TOPIC_ID:
+		LOG_INF("MQTT Subscribed to GPS topic");
+		break;
+	default:
+		LOG_WRN("MQTT Subscribed to unknown topic id: %d", message_id);
 	}
 }
 
@@ -573,7 +595,7 @@ static void subscribe(void)
 /* Connect work - Used to establish a connection to the MQTT broker and schedule reconnection
  * attempts.
  */
-static void connect_work_fn(struct k_work *work)
+static void mqtt_connect_work_fn(struct k_work *work)
 {
 	ARG_UNUSED(work);
 
@@ -602,52 +624,50 @@ static void connect_work_fn(struct k_work *work)
 
 	err = mqtt_client_connect(&conn_params);
 	if (err) {
-		LOG_ERR("Failed connecting to MQTT, error code: %d", err);
+		LOG_ERR("Failed connecting to MQTT, error code: %d.", err);
+		retry_connect_to_broker();
 	}
-
-	k_work_reschedule_for_queue(&transport_queue, &connect_work,
-			  K_SECONDS(CONFIG_MQTT_SAMPLE_TRANSPORT_RECONNECTION_TIMEOUT_SECONDS));
 }
 
 /* Zephyr State Machine framework handlers */
 
 /* Function executed when the module enters the disconnected state. */
-static void disconnected_entry(void *o)
+static void mqtt_disconnected_entry(void *o)
 {
-	struct s_object *user_object = o;
+	struct s_object *ctx = o;
 
 	/* Reschedule a connection attempt if we are connected to network and we enter the
 	 * disconnected state.
 	 */
-	if (user_object->status == NETWORK_CONNECTED) {
-		k_work_reschedule_for_queue(&transport_queue, &connect_work, K_NO_WAIT);
+	if (ctx->network_connection_status == NETWORK_CONNECTED) {
+		retry_connect_to_broker();
 	}
 }
 
 /* Function executed when the module is in the disconnected state. */
-static void disconnected_run(void *o)
+static void mqtt_disconnected_run(void *o)
 {
-	struct s_object *user_object = o;
+	struct s_object *ctx = o;
 
-	if ((user_object->status == NETWORK_DISCONNECTED) && (user_object->chan == &NETWORK_CHAN)) {
+	if ((ctx->network_connection_status == NETWORK_DISCONNECTED) && (ctx->chan == &NETWORK_CHAN)) {
 		/* If NETWORK_DISCONNECTED is received after the MQTT connection is closed,
 		 * we cancel the connect work if it is onging.
 		 */
-		k_work_cancel_delayable(&connect_work);
+		k_work_cancel_delayable(&mqtt_connect_work);
 	}
 
-	else if ((user_object->status == NETWORK_CONNECTED) && (user_object->chan == &NETWORK_CHAN)) {
+	else if ((ctx->network_connection_status == NETWORK_CONNECTED) && (ctx->chan == &NETWORK_CHAN)) {
 
 		/* Wait for 5 seconds to ensure that the network stack is ready before
 		 * attempting to connect to MQTT. This delay is only needed when building for
 		 * Wi-Fi.
 		 */
-		k_work_reschedule_for_queue(&transport_queue, &connect_work, K_SECONDS(5));
+		k_work_reschedule_for_queue(&transport_queue, &mqtt_connect_work, K_SECONDS(5));
 	}
 }
 
 /* Function executed when the module enters the connected state. */
-static void connected_entry(void *o)
+static void mqtt_connected_entry(void *o)
 {
 	LOG_INF("Connected to MQTT broker");
 	LOG_INF("Hostname: %s", CONFIG_MQTT_SAMPLE_TRANSPORT_BROKER_HOSTNAME);
@@ -658,17 +678,17 @@ static void connected_entry(void *o)
 	ARG_UNUSED(o);
 
 	/* Cancel any ongoing connect work when we enter connected state */
-	k_work_cancel_delayable(&connect_work);
+	k_work_cancel_delayable(&mqtt_connect_work);
 
 	subscribe();
 }
 
 /* Function executed when the module is in the connected state. */
-static void connected_run(void *o)
+static void mqtt_connected_run(void *o)
 {
-	struct s_object *user_object = o;
+	struct s_object *ctx = o;
 
-	if ((user_object->status == NETWORK_DISCONNECTED) && (user_object->chan == &NETWORK_CHAN)) {
+	if ((ctx->network_connection_status == NETWORK_DISCONNECTED) && (ctx->chan == &NETWORK_CHAN)) {
 		/* Explicitly disconnect the MQTT transport when losing network connectivity.
 		 * This is to cleanup any internal library state.
 		 * The call to this function will cause on_mqtt_disconnect() to be called.
@@ -677,15 +697,15 @@ static void connected_run(void *o)
 		return;
 	}
 
-	if (user_object->chan != &PAYLOAD_CHAN) {
+	if (ctx->chan != &PAYLOAD_CHAN) {
 		return;
 	}
 
-	publish(&user_object->payload);
+	publish(&ctx->payload);
 }
 
 /* Function executed when the module exits the connected state. */
-static void connected_exit(void *o)
+static void mqtt_connected_exit(void *o)
 {
 	ARG_UNUSED(o);
 
@@ -694,9 +714,9 @@ static void connected_exit(void *o)
 
 /* Construct state table */
 static const struct smf_state state[] = {
-	[MQTT_DISCONNECTED] = SMF_CREATE_STATE(disconnected_entry, disconnected_run, NULL,
+	[MQTT_DISCONNECTED] = SMF_CREATE_STATE(mqtt_disconnected_entry, mqtt_disconnected_run, NULL,
 					       NULL, NULL),
-	[MQTT_CONNECTED] = SMF_CREATE_STATE(connected_entry, connected_run, connected_exit,
+	[MQTT_CONNECTED] = SMF_CREATE_STATE(mqtt_connected_entry, mqtt_connected_run, mqtt_connected_exit,
 					    NULL, NULL),
 };
 
@@ -748,7 +768,7 @@ static void transport_task(void)
 				return;
 			}
 
-			s_obj.status = status;
+			s_obj.network_connection_status = status;
 		}
 
 		else if (&PAYLOAD_CHAN == chan) {
@@ -774,7 +794,7 @@ static void transport_task(void)
 			}
 
 			/* Only publish if MQTT is connected */
-			if (s_obj.status == NETWORK_CONNECTED ) {
+			if (s_obj.network_connection_status == NETWORK_CONNECTED ) {
 			    // && smf_get_current_leaf_state(SMF_CTX(&s_obj)) == &state[MQTT_CONNECTED]) {
 				publish_camera_chunk(&chunk);
 			}
@@ -792,7 +812,7 @@ static void transport_task(void)
 			}
 
 			/* Only publish if MQTT is connected */
-			if (s_obj.status == NETWORK_CONNECTED ) {
+			if (s_obj.network_connection_status == NETWORK_CONNECTED ) {
 			    // && smf_get_current_leaf_state(SMF_CTX(&s_obj)) == &state[MQTT_CONNECTED]) {
 				publish_camera_error(error);
 			}
@@ -810,7 +830,7 @@ static void transport_task(void)
 			}
 
 			/* Only publish if MQTT is connected */
-			if (s_obj.status == NETWORK_CONNECTED ) {
+			if (s_obj.network_connection_status == NETWORK_CONNECTED ) {
 			    // && smf_get_current_leaf_state(SMF_CTX(&s_obj)) == &state[MQTT_CONNECTED]) {
 				publish_gps_data(&gps);
 			}
@@ -828,7 +848,7 @@ static void transport_task(void)
 			}
 
 			/* Only publish if MQTT is connected */
-			if (s_obj.status == NETWORK_CONNECTED ) {
+			if (s_obj.network_connection_status == NETWORK_CONNECTED ) {
 			    // && smf_get_current_leaf_state(SMF_CTX(&s_obj)) == &state[MQTT_CONNECTED]) {
 				publish_gps_error(error);
 			}

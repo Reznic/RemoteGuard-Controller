@@ -8,6 +8,13 @@ config MQTT_SAMPLE_TRANSPORT_RECONNECTION_TIMEOUT_SECONDS
 	help
 	  Time in between reconnection attempts to the MQTT broker.
 
+config MQTT_SAMPLE_TRANSPORT_RECONNECT_MAX_ATTEMPTS
+	int "Maximum failed MQTT broker connect attempts (0 = no-retry)"
+	default 3
+	range 0 255
+	help
+	  Max attempts to connect to MQTT broker server
+
 config MQTT_SAMPLE_TRANSPORT_THREAD_STACK_SIZE
 	int "Thread stack size"
 	default 2048
