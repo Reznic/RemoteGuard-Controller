@@ -133,6 +133,22 @@ int mqtt_client_subscribe(struct mqtt_subscription_list *sub_list);
  */
 int mqtt_client_publish(const struct mqtt_publish_param *param);
 
+/** @brief Publish an MQTT string message.
+ *
+ *  @retval 0 if successful.
+ *  @retval -EOPNOTSUPP if operation is not supported in the current state.
+ *  @return Otherwise a negative error code.
+ */
+int mqtt_client_publish_str(const char *topic, const char *payload);
+
+/** @brief Publish an MQTT string message with QoS and retention flags.
+ *
+ *  @retval 0 if successful.
+ *  @retval -EOPNOTSUPP if operation is not supported in the current state.
+ *  @return Otherwise a negative error code.
+ */
+int mqtt_client_publish_str_with_qos(const char *topic, const char *payload, uint8_t qos, bool retain, bool dup);
+
 /** @brief Get a message ID.
  *
  *  @note Will not return 0 as it is reserved for invalid message IDs, see MQTT specification.

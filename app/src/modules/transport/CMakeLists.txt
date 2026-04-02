@@ -5,6 +5,8 @@ target_sources(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/transport.c)
 # Add Client ID helper library
 add_subdirectory(client_id)
 
+add_subdirectory(publish_msg_factory)
+
 # Add credentials provision library if the Modem key Management API is enabled.
 # The library provisions credentials placed in the src/transport/credentials/ folder to
 # the nRF91 modem.

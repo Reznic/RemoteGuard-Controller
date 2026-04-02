@@ -11,6 +11,7 @@
 
 #include "client_id.h"
 #include "message_channel.h"
+#include "publish_msg_factory.h"
 #include "transport.h"
 
 /* Register log module */
@@ -41,13 +42,13 @@ static struct k_work_q transport_queue;
 /* Internal states */
 enum module_state { MQTT_CONNECTED, MQTT_DISCONNECTED };
 
-/* MQTT client ID buffer */
-static char client_id[CONFIG_MQTT_SAMPLE_TRANSPORT_CLIENT_ID_BUFFER_SIZE];
+/* MQTT client ID buffer (shared with publish_msg_factory.c) */
+char client_id[CONFIG_MQTT_SAMPLE_TRANSPORT_CLIENT_ID_BUFFER_SIZE];
 
-static uint8_t pub_topic[sizeof(client_id) + sizeof(CONFIG_MQTT_SAMPLE_TRANSPORT_PUBLISH_TOPIC)];
+uint8_t pub_topic[sizeof(client_id) + sizeof(CONFIG_MQTT_SAMPLE_TRANSPORT_PUBLISH_TOPIC)];
 static uint8_t sub_topic[sizeof(client_id) + sizeof(CONFIG_MQTT_SAMPLE_TRANSPORT_SUBSCRIBE_TOPIC)];
 static uint8_t get_gps_topic[sizeof(client_id) + sizeof(CONFIG_MQTT_GPS_CMD_TOPIC)];
-static uint8_t gps_pub_topic[sizeof(client_id) + sizeof(CONFIG_MQTT_GPS_DATA_TOPIC)];
+uint8_t gps_pub_topic[sizeof(client_id) + sizeof(CONFIG_MQTT_GPS_DATA_TOPIC)];
 #if defined(CONFIG_MQTT_CLIENT_LAST_WILL)
 static uint8_t lwt_topic[sizeof(client_id) + sizeof(CONFIG_MQTT_CLIENT_LAST_WILL_TOPIC) + 2];
 #endif
@@ -295,258 +296,6 @@ static int topics_prefix(void)
 	return 0;
 }
 
-static void publish(struct payload *payload)
-{
-	int err;
-
-	struct mqtt_publish_param param = {
-		.message.payload.data = payload->string,
-		.message.payload.len = strlen(payload->string),
-		.message.topic.qos = MQTT_QOS_1_AT_LEAST_ONCE,
-		.message_id = mqtt_client_msg_id_get(),
-		.message.topic.topic.utf8 = pub_topic,
-		.message.topic.topic.size = strlen(pub_topic),
-	};
-
-	err = mqtt_client_publish(&param);
-	if (err) {
-		LOG_WRN("Failed to send payload, err: %d", err);
-		return;
-	}
-
-	LOG_INF("Published message: \"%.*s\" on topic: \"%.*s\"", param.message.payload.len,
-								  param.message.payload.data,
-								  param.message.topic.topic.size,
-								  param.message.topic.topic.utf8);
-}
-
-/* Publish camera chunk over MQTT */
-static void publish_camera_chunk(struct camera_chunk *chunk)
-{
-	int err;
-	static char photo_meta_topic[sizeof(client_id) + 32];
-	static char photo_chunk_topic[sizeof(client_id) + 64];
-	static bool meta_published = false;
-	static uint32_t last_sequence = UINT32_MAX;
-
-	/* Publish meta on first chunk */
-	if (chunk->sequence == 0) {
-		int len = snprintk(photo_meta_topic, sizeof(photo_meta_topic),
-				   "%s/camera/photo/meta", client_id);
-		if (len < 0 || len >= sizeof(photo_meta_topic)) {
-			LOG_ERR("Photo meta topic buffer too small");
-			return;
-		}
-
-		/* Meta payload: JSON with id, chunks, size */
-		char meta_buf[128];
-		len = snprintk(meta_buf, sizeof(meta_buf),
-			       "{\"id\":%u,\"chunks\":%u,\"size\":%u}",
-			       (uint32_t)k_uptime_get_32(), chunk->total_chunks, chunk->total_size);
-		if (len < 0 || len >= sizeof(meta_buf)) {
-			LOG_ERR("Meta buffer too small");
-			return;
-		}
-
-		struct mqtt_publish_param meta_param = {
-			.message.payload.data = meta_buf,
-			.message.payload.len = len,
-			.message.topic.qos = MQTT_QOS_1_AT_LEAST_ONCE,
-			.message_id = mqtt_client_msg_id_get(),
-			.message.topic.topic.utf8 = photo_meta_topic,
-			.message.topic.topic.size = strlen(photo_meta_topic),
-		};
-
-		err = mqtt_client_publish(&meta_param);
-		if (err) {
-			LOG_ERR("Failed to publish photo meta, err: %d", err);
-			return;
-		}
-
-		LOG_INF("Published photo meta: %s", meta_buf);
-		meta_published = true;
-	}
-
-	/* Publish chunk */
-	int len = snprintk(photo_chunk_topic, sizeof(photo_chunk_topic),
-			   "%s/camera/photo/chunk/%u", client_id, chunk->sequence);
-	if (len < 0 || len >= sizeof(photo_chunk_topic)) {
-		LOG_ERR("Photo chunk topic buffer too small");
-		return;
-	}
-
-	struct mqtt_publish_param chunk_param = {
-		.message.payload.data = chunk->data,
-		.message.payload.len = chunk->size,
-		.message.topic.qos = MQTT_QOS_1_AT_LEAST_ONCE,
-		.message_id = mqtt_client_msg_id_get(),
-		.message.topic.topic.utf8 = photo_chunk_topic,
-		.message.topic.topic.size = strlen(photo_chunk_topic),
-	};
-
-	err = mqtt_client_publish(&chunk_param);
-	if (err) {
-		LOG_ERR("Failed to publish photo chunk %u, err: %d", chunk->sequence, err);
-		return;
-	}
-
-	LOG_DBG("Published photo chunk %u/%u (%u bytes)", chunk->sequence + 1,
-		chunk->total_chunks, chunk->size);
-
-	/* Reset meta flag on last chunk */
-	if (chunk->sequence == chunk->total_chunks - 1) {
-		meta_published = false;
-		last_sequence = UINT32_MAX;
-		LOG_INF("Photo upload complete: %u chunks", chunk->total_chunks);
-	}
-}
-
-/* Publish GPS data over MQTT */
-static void publish_gps_data(struct gps_data *gps)
-{
-	int err;
-	char gps_json[128];
-	int len;
-
-	len = snprintk(gps_json, sizeof(gps_json),
-			"{\"lat\":%.6f,\"lon\":%.6f,\"accuracy\":%.1f}",
-			(double)gps->latitude, (double)gps->longitude, (double)gps->accuracy);
-	if (len < 0 || len >= sizeof(gps_json)) {
-		LOG_ERR("GPS JSON buffer too small");
-		return;
-	}
-
-	struct mqtt_publish_param param = {
-		.message.payload.data = (uint8_t *)gps_json,
-		.message.payload.len = len,
-		.message.topic.qos = MQTT_QOS_1_AT_LEAST_ONCE,
-		.message_id = mqtt_client_msg_id_get(),
-		.message.topic.topic.utf8 = gps_pub_topic,
-		.message.topic.topic.size = strlen(gps_pub_topic),
-	};
-
-	err = mqtt_client_publish(&param);
-	if (err) {
-		LOG_ERR("Failed to publish GPS data, err: %d", err);
-		return;
-	}
-
-	LOG_INF("Published GPS data: %s", gps_json);
-}
-
-/* Publish GPS error over MQTT */
-static void publish_gps_error(enum gnss_error_type error)
-{
-	int err;
-	static char error_topic[sizeof(client_id) + 32];
-	const char *error_str;
-
-	switch (error) {
-	case GNSS_ERROR_NRF_INTERNAL:
-		error_str = "nrf_internal_error";
-		break;
-	case GNSS_ERROR_INIT_FAILED:
-		error_str = "gnss_init_failed";
-		break;
-	case GNSS_ERROR_ACTIVATION_FAILED:
-		error_str = "gnss_activation_failed";
-		break;
-	case GNSS_ERROR_EVENT_HANDLER_FAILED:
-		error_str = "gnss_event_handler_failed";
-		break;
-	case GNSS_ERROR_CONFIG_FAILED:
-		error_str = "gnss_config_failed";
-		break;
-	case GNSS_ERROR_START_FAILED:
-		error_str = "gnss_start_failed";
-		break;
-	case GNSS_ERROR_STOP_FAILED:
-		error_str = "gnss_stop_failed";
-		break;
-	case GNSS_ERROR_TIMEOUT:
-		error_str = "gnss_timeout";
-		break;
-	case GNSS_ERROR_INVALID_FIX:
-		error_str = "gnss_invalid_fix";
-		break;
-	case GNSS_ERROR_PVT_READ_FAILED:
-		error_str = "gnss_pvt_read_failed";
-		break;
-	default:
-		error_str = "unknown";
-		break;
-	}
-
-	int len = snprintk(error_topic, sizeof(error_topic), "%s/device/gps/error", client_id);
-	if (len < 0 || len >= sizeof(error_topic)) {
-		LOG_ERR("GPS error topic buffer too small");
-		return;
-	}
-
-	struct mqtt_publish_param param = {
-		.message.payload.data = (uint8_t *)error_str,
-		.message.payload.len = strlen(error_str),
-		.message.topic.qos = MQTT_QOS_1_AT_LEAST_ONCE,
-		.message_id = mqtt_client_msg_id_get(),
-		.message.topic.topic.utf8 = error_topic,
-		.message.topic.topic.size = strlen(error_topic),
-	};
-
-	err = mqtt_client_publish(&param);
-	if (err) {
-		LOG_ERR("Failed to publish GPS error, err: %d", err);
-		return;
-	}
-
-	LOG_INF("Published GPS error: %s", error_str);
-}
-
-/* Publish camera error over MQTT */
-static void publish_camera_error(enum camera_error_type error)
-{
-	int err;
-	static char error_topic[sizeof(client_id) + 32];
-	const char *error_str;
-
-	switch (error) {
-	case CAMERA_ERROR_NRF_INTERNAL:
-		error_str = "nrf_internal_error";
-		break;
-	case CAMERA_ERROR_ESP32_NOT_RESPONDING:
-		error_str = "cam_module_not_responding";
-		break;
-	case CAMERA_ERROR_ESP32_CAMERA_ACCESS_FAILED:
-		error_str = "camera_access_failed";
-		break;
-	default:
-		error_str = "unknown";
-		break;
-	}
-
-	int len = snprintk(error_topic, sizeof(error_topic), "%s/camera/error", client_id);
-	if (len < 0 || len >= sizeof(error_topic)) {
-		LOG_ERR("Error topic buffer too small");
-		return;
-	}
-
-	struct mqtt_publish_param param = {
-		.message.payload.data = (uint8_t *)error_str,
-		.message.payload.len = strlen(error_str),
-		.message.topic.qos = MQTT_QOS_1_AT_LEAST_ONCE,
-		.message_id = mqtt_client_msg_id_get(),
-		.message.topic.topic.utf8 = error_topic,
-		.message.topic.topic.size = strlen(error_topic),
-	};
-
-	err = mqtt_client_publish(&param);
-	if (err) {
-		LOG_ERR("Failed to publish camera error, err: %d", err);
-		return;
-	}
-
-	LOG_INF("Published camera error: %s", error_str);
-}
-
 static void subscribe(void)
 {
 	int err;
@@ -700,8 +449,7 @@ static void mqtt_connected_run(void *o)
 	if (ctx->chan != &PAYLOAD_CHAN) {
 		return;
 	}
-
-	publish(&ctx->payload);
+	mqtt_client_publish_str(pub_topic, ctx->payload.string);
 }
 
 /* Function executed when the module exits the connected state. */
@@ -867,7 +615,6 @@ static void transport_task(void)
 #if defined(CONFIG_MQTT_CLIENT_LAST_WILL)
 int transport_mqtt_clean_offline(void)
 {
-	static const char payload[] = "offline_clean";
 	int err;
 
 	if (atomic_get(&transport_mqtt_connected) == 0) {
@@ -875,18 +622,7 @@ int transport_mqtt_clean_offline(void)
 		return -ENOTCONN;
 	}
 
-	struct mqtt_publish_param param = {
-		.message.payload.data = (uint8_t *)payload,
-		.message.payload.len = sizeof(payload) - 1,
-		.message.topic.qos = MQTT_QOS_1_AT_LEAST_ONCE,
-		.message_id = mqtt_client_msg_id_get(),
-		.message.topic.topic.utf8 = lwt_topic,
-		.message.topic.topic.size = strlen(lwt_topic),
-		.dup_flag = 0,
-		.retain_flag = 1,
-	};
-
-	err = mqtt_client_publish(&param);
+	err = mqtt_client_publish_str_with_qos(lwt_topic, "offline_clean", MQTT_QOS_1_AT_LEAST_ONCE, /*retain*/true, /*dup*/false);
 	if (err) {
 		LOG_ERR("Failed to publish offline_clean: %d", err);
 		return err;

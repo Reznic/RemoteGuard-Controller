@@ -717,6 +717,27 @@ int mqtt_client_publish(const struct mqtt_publish_param *param)
 	return mqtt_publish(&mqtt_client, param);
 }
 
+int mqtt_client_publish_str(const char *topic, const char *payload)
+{
+	return mqtt_client_publish_str_with_qos(topic, payload, MQTT_QOS_1_AT_LEAST_ONCE, false, false);
+}
+
+int mqtt_client_publish_str_with_qos(const char *topic, const char *payload, uint8_t qos, bool retain, bool dup)
+{
+	struct mqtt_publish_param param = {
+		.message.payload.data = (void *)payload,
+		.message.payload.len = strlen(payload),
+		.message.topic.qos = qos,
+		.message_id = mqtt_client_msg_id_get(),
+		.message.topic.topic.utf8 = topic,
+		.message.topic.topic.size = strlen(topic),
+		.dup_flag = dup,
+		.retain_flag = retain
+	};
+
+	return mqtt_client_publish(&param);
+}
+
 uint16_t mqtt_client_msg_id_get(void)
 {
 	static uint16_t id;
