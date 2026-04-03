@@ -7,6 +7,8 @@ on:
       - 'app/**'
       - 'boards/**'
       - 'zephyr/**'
+      - 'tests/**'
+      - 'scripts/**'
       - 'CMakeLists.txt'
       - 'Kconfig'
       - 'VERSION'
@@ -36,11 +38,26 @@ jobs:
           app-path: nrf9151-connectkit
           toolchains: arm-zephyr-eabi
 
-      - name: Twister Application
+      # 32-bit native_sim (-m32) needs multilib + 32-bit libc headers for the NSI runner link.
+      - name: Host packages for native_sim (32-bit x86)
+        run: sudo apt-get update && sudo apt-get install -y gcc-multilib libc6-dev-i386
+
+      - name: Build Twister Application
         working-directory: nrf9151-connectkit
         shell: bash
         run: |
           west twister -T app -v --inline-logs --integration
+
+      - name: Unit tests
+        working-directory: nrf9151-connectkit
+        shell: bash
+        run: |
+          west twister -T tests/ztest/topic_format -v --inline-logs -p native_sim
+
+      - name: Integration tests
+        working-directory: nrf9151-connectkit
+        shell: bash
+        run: ./scripts/run_integration_tests.sh -v
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
