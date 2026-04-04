@@ -63,3 +63,41 @@ def load_build_config(build_dir: Optional[Path] = None) -> dict[str, str]:
     if path is None:
         return {}
     return parse_dotconfig(path)
+
+
+def full_topic(device_id: str, suffix: str) -> str:
+    """Mirror transport `topics_prefix()`: {client_id}/{suffix}."""
+    return f"{device_id}/{suffix}"
+
+
+def get_mqtt_transport_subscribe_suffix(cfg: dict[str, str]) -> str:
+    return cfg.get("CONFIG_MQTT_SAMPLE_TRANSPORT_SUBSCRIBE_TOPIC", "my/subscribe/topic")
+
+
+def get_mqtt_gps_cmd_suffix(cfg: dict[str, str]) -> str:
+    return cfg.get("CONFIG_MQTT_GPS_CMD_TOPIC", "device/get_gps")
+
+
+def get_mqtt_gps_data_suffix(cfg: dict[str, str]) -> str:
+    return cfg.get("CONFIG_MQTT_GPS_DATA_TOPIC", "device/gps")
+
+
+def get_gnss_mock_latitude(cfg: dict[str, str]) -> float:
+    return float(cfg.get("CONFIG_MQTT_SAMPLE_GNSS_MOCK_LATITUDE", "59.913900"))
+
+
+def get_gnss_mock_longitude(cfg: dict[str, str]) -> float:
+    return float(cfg.get("CONFIG_MQTT_SAMPLE_GNSS_MOCK_LONGITUDE", "10.752200"))
+
+
+def get_gnss_mock_accuracy(cfg: dict[str, str]) -> float:
+    return float(cfg.get("CONFIG_MQTT_SAMPLE_GNSS_MOCK_ACCURACY", "5.0"))
+
+
+def find_native_sim_executable(build_dir: Path) -> Optional[Path]:
+    """Return the native_sim host runner under zephyr/ (Linux or Windows name)."""
+    for name in ("zephyr", "zephyr.exe"):
+        candidate = build_dir / "zephyr" / name
+        if candidate.is_file():
+            return candidate
+    return None

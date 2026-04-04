@@ -1,5 +1,5 @@
 # Copyright (c) 2016-2025 Makerdiary <https://makerdiary.com>
-name: Twister Apps & Samples
+name: CI pipeline
 
 on:
   push:

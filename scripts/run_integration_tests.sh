@@ -8,7 +8,8 @@
 # Usage (from nrf9151-connectkit repo root):
 #   ./scripts/run_integration_tests.sh
 # Env:
-#   ZEPHYR_BUILD_DIR  Path to west build dir containing zephyr/.config (default: build-native-sim/app)
+#   INTEGRATION_ZEPHYR_BUILD_DIR  If set, pytest uses this build for .config and native_sim (overrides auto-detect)
+#   ZEPHYR_BUILD_DIR  Used when build-native-sim/app is missing; also exported for tools (default: build-native-sim/app)
 #   SKIP_NATIVE_BUILD  If set to 1, skip `west build` (use existing build)
 
 set -euo pipefail

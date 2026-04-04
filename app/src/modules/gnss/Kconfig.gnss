@@ -4,11 +4,51 @@
 # SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
 #
 
+config MQTT_SAMPLE_GNSS_MOCK
+	bool "Mock GNSS (native_sim integration)"
+	depends on BOARD_NATIVE_SIM
+	default y if BOARD_NATIVE_SIM
+	default n
+	help
+	  Provide a fake GNSS implementation that publishes fixed coordinates on GPS_DATA_CHAN
+	  when GNSS_CMD_GET_LOCATION is received. Used for MQTT integration tests on native_sim.
+	  Mutually exclusive with the real modem GNSS module.
+
+if MQTT_SAMPLE_GNSS_MOCK
+
+config MQTT_SAMPLE_GNSS_MOCK_LATITUDE
+	string "Mock latitude (decimal degrees)"
+	default "59.913900"
+
+config MQTT_SAMPLE_GNSS_MOCK_LONGITUDE
+	string "Mock longitude (decimal degrees)"
+	default "10.752200"
+
+config MQTT_SAMPLE_GNSS_MOCK_ACCURACY
+	string "Mock horizontal accuracy (meters)"
+	default "5.0"
+
+config MQTT_SAMPLE_GNSS_MOCK_THREAD_STACK_SIZE
+	int "Mock GNSS thread stack size"
+	default 2048
+
+config MQTT_SAMPLE_GNSS_MOCK_MESSAGE_QUEUE_SIZE
+	int "Mock GNSS message queue size"
+	default 10
+
+module = MQTT_SAMPLE_GNSS_MOCK
+module-str = GNSS mock
+source "subsys/logging/Kconfig.template.log_config"
+
+endif # MQTT_SAMPLE_GNSS_MOCK
+
 menuconfig MQTT_SAMPLE_GNSS
 	bool "Enable GNSS module"
+	depends on !MQTT_SAMPLE_GNSS_MOCK
 	default y
 	help
-	  Enable the GNSS module for GPS location tracking.
+	  Enable the GNSS module for GPS location tracking (nRF modem). Disabled when
+	  MQTT_SAMPLE_GNSS_MOCK is selected.
 
 if MQTT_SAMPLE_GNSS
 
@@ -31,8 +71,8 @@ config MQTT_SAMPLE_GNSS_FIX_TIMEOUT
 	help
 	  Maximum time to wait for a GPS fix before timing out.
 
-endif # MQTT_SAMPLE_GNSS
-
 module = MQTT_SAMPLE_GNSS
 module-str = GNSS
 source "subsys/logging/Kconfig.template.log_config"
+
+endif # MQTT_SAMPLE_GNSS
