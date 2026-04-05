@@ -5,9 +5,63 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Generator
+from typing import Any, Generator
 
 import pytest
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    config._integration_github_failures = []  # type: ignore[attr-defined]
+
+
+def pytest_runtest_logreport(report: Any) -> None:
+    if report.outcome != "failed" or report.when not in ("setup", "call", "teardown"):
+        return
+    if not os.environ.get("GITHUB_STEP_SUMMARY"):
+        return
+    failures: list[tuple[str, str, str]] = getattr(
+        report.config, "_integration_github_failures", []
+    )
+    failures.append((report.nodeid, report.when, str(report.longrepr)))
+    report.config._integration_github_failures = failures  # type: ignore[attr-defined]
+
+
+def pytest_collectreport(report: Any) -> None:
+    if report.outcome != "failed":
+        return
+    if not os.environ.get("GITHUB_STEP_SUMMARY"):
+        return
+    config = report.config
+    failures: list[tuple[str, str, str]] = getattr(
+        config, "_integration_github_failures", []
+    )
+    nodeid = getattr(report, "nodeid", "collection")
+    failures.append((nodeid, "collect", str(report.longrepr)))
+    config._integration_github_failures = failures  # type: ignore[attr-defined]
+
+
+def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
+    summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
+    if not summary_path or exitstatus == 0:
+        return
+    failures: list[tuple[str, str, str]] | None = getattr(
+        session.config, "_integration_github_failures", None
+    )
+    if not failures:
+        return
+    parts: list[str] = ["\n## Integration test failures\n\n"]
+    for nodeid, when, text in failures:
+        parts.append(f"### `{nodeid}` ({when})\n\n")
+        parts.append("```\n")
+        parts.append(text)
+        if not text.endswith("\n"):
+            parts.append("\n")
+        parts.append("```\n\n")
+    try:
+        with open(summary_path, "a", encoding="utf-8") as f:
+            f.write("".join(parts))
+    except OSError:
+        pass
 
 from simulator_runner import SimulatorRunner
 
