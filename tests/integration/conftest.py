@@ -87,17 +87,13 @@ def zephyr_build_dir() -> Path | None:
     """
     here = Path(__file__).resolve().parent
     repo = here.parent.parent
-    build_native_sim = repo / "build-native-sim"
-    integration_app = build_native_sim / "app"
+    integration = repo / "build-native-sim" / "app"
     env_integration = os.environ.get("INTEGRATION_ZEPHYR_BUILD_DIR")
     if env_integration:
         p = Path(env_integration)
         return p if (p / "zephyr" / ".config").is_file() else None
-    # west build -d build-native-sim puts .config here (not under build-native-sim/app/)
-    if (build_native_sim / "zephyr" / ".config").is_file():
-        return build_native_sim
-    if (integration_app / "zephyr" / ".config").is_file():
-        return integration_app
+    if (integration / "zephyr" / ".config").is_file():
+        return integration
     env = os.environ.get("ZEPHYR_BUILD_DIR")
     if env:
         p = Path(env)
@@ -157,11 +153,9 @@ def mqtt_gps_data_topic(kconfig: dict[str, str], integration_device_id: str) -> 
 @pytest.fixture(scope="session")
 def simulator_runner(zephyr_build_dir: Path | None) -> Generator[SimulatorRunner, None, None]:
     """Runs native_sim until tests finish; first waits for MQTT connected log line."""
-    if zephyr_build_dir is None:
-        pytest.skip("No Zephyr build dir (set ZEPHYR_BUILD_DIR or build build-native-sim/app)")
     exe = find_native_sim_executable(zephyr_build_dir)
     if exe is None:
-        pytest.skip(f"No native_sim executable under {zephyr_build_dir / 'zephyr'!s}")
+        pytest.fail(f"No native_sim executable under {zephyr_build_dir / 'zephyr'!s}")
 
     dut = SimulatorRunner(exe)
     dut.start(boot_timeout=30.0)
