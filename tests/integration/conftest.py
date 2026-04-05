@@ -11,8 +11,7 @@ import pytest
 
 from native_sim_dut import (
     NATIVE_SIM_APP_BOOT_LOG_LINE,
-    NativeSimDut,
-    native_sim_log_file_path,
+    NativeSimDut
 )
 
 from kconfig_utils import (
@@ -110,21 +109,14 @@ def native_sim_dut(zephyr_build_dir: Path | None) -> Generator[NativeSimDut, Non
         pytest.skip(f"No native_sim executable under {zephyr_build_dir / 'zephyr'!s}")
 
     dut = NativeSimDut(exe)
-    dut.start()
-    
-    try:
-        # Confirms Zephyr + app threads started (see network.c).
-        dut.wait_for_substring(NATIVE_SIM_APP_BOOT_LOG_LINE, timeout=30.0)
-    except TimeoutError as e:
-        dut.stop()
-        pytest.fail(f"Zephyr app did not boot on simulator: {e}")
-
+    dut.start(boot_timeout=30.0)
     try:
         dut.wait_for_substring("Connected to MQTT broker", timeout=120.0)
         yield dut
 
     except TimeoutError as e:
         pytest.fail(f"App failed to connect to mqtt broker: {e}")
+
     finally:
         dut.stop()
-
+        dut.assert_no_error_logs()

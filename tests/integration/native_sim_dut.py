@@ -10,9 +10,8 @@ import subprocess
 import threading
 import time
 from pathlib import Path
+import pytest
 
-# Substring of LOG_INF in app/src/modules/network/network.c — printed once network_task runs.
-NATIVE_SIM_APP_BOOT_LOG_LINE = "Bringing network interface up and connecting to the network"
 
 
 def native_sim_log_file_path() -> Path:
@@ -25,15 +24,18 @@ def native_sim_log_file_path() -> Path:
 
 
 class NativeSimDut:
+    APP_BOOT_MSG = "Booting nRF Connect"
+    LOG_ERR_MARKER = "<err>"
+    
     def __init__(self, executable: Path) -> None:
         self._executable = executable
         self._proc: subprocess.Popen[str] | None = None
         self._lines: list[str] = []
-        self._lock = threading.Lock()
+        self._stdout_lock = threading.Lock()
         self._reader: threading.Thread | None = None
         self._log_file_path = native_sim_log_file_path()
 
-    def start(self) -> None:
+    def start(self, boot_timeout: float = 30.0) -> None:
         if self._proc is not None:
             return
         self._log_file_path.parent.mkdir(parents=True, exist_ok=True)
@@ -45,15 +47,12 @@ class NativeSimDut:
             bufsize=1,
         )
 
-        def read_stdout() -> None:
-            assert self._proc is not None
-            assert self._proc.stdout is not None
-            for line in self._proc.stdout:
-                with self._lock:
-                    self._lines.append(line)
-
-        self._reader = threading.Thread(target=read_stdout, daemon=True)
+        self._reader = threading.Thread(target=self._read_stdout, daemon=True)
         self._reader.start()
+        try:
+            self.wait_for_substring(self.APP_BOOT_MSG, timeout=boot_timeout)
+        except TimeoutError as e:
+            pytest.fail(f"Zephyr app did not boot on simulator: {e}")
 
     def stop(self) -> None:
         if self._proc is None:
@@ -67,8 +66,15 @@ class NativeSimDut:
         self._proc = None
         self._log_file_path.write_text(self.joined_output(), encoding="utf-8")
 
+    def _read_stdout(self) -> None:
+        assert self._proc is not None
+        assert self._proc.stdout is not None
+        for line in self._proc.stdout:
+            with self._stdout_lock:
+                self._lines.append(line)
+    
     def joined_output(self) -> str:
-        with self._lock:
+        with self._stdout_lock:
             return "".join(self._lines)
     
     def wait_for_substring(self, needle: str, timeout: float = 120.0) -> None:
@@ -81,3 +87,15 @@ class NativeSimDut:
 
     def log_file_path(self) -> Path:
         return self._log_file_path
+
+    def find_error_logs(self, log: str) -> list[str]:
+        """Return stripped lines that contain Zephyr error-level log marker."""
+        return [line.rstrip("\n\r") 
+                for line in self.joined_output().splitlines() 
+                if self.LOG_ERR_MARKER in line]
+
+    def assert_no_error_logs(self) -> None:
+        """Fail the current test if the log contains any errors"""
+        error_logs = self.find_error_logs()
+        if error_logs:
+            pytest.fail("simulator log had errors:\n" + "\n".join(error_logs))
