@@ -1,8 +1,10 @@
 # Copyright (c) 2016-2025 Makerdiary <https://makerdiary.com>
 name: CI pipeline
 
+# PR branches: only pull_request runs (not push), so each update triggers a single workflow.
+# Default branch: push runs when commits land on main (merge or direct push).
 on:
-  push:
+  pull_request:
     paths:
       - 'app/**'
       - 'boards/**'
@@ -13,7 +15,19 @@ on:
       - 'Kconfig'
       - 'VERSION'
       - 'west.yml'
-  pull_request:
+  push:
+    branches:
+      - main
+    paths:
+      - 'app/**'
+      - 'boards/**'
+      - 'zephyr/**'
+      - 'tests/**'
+      - 'scripts/**'
+      - 'CMakeLists.txt'
+      - 'Kconfig'
+      - 'VERSION'
+      - 'west.yml'
   # schedule:
     # Run at 03:00 UTC on every Sunday
     # - cron: "0 3 * * 0"
