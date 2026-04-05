@@ -18,7 +18,7 @@ from kconfig_utils import (
 
 @pytest.mark.mqtt
 @pytest.mark.e2e
-@pytest.mark.usefixtures("native_sim_dut")
+@pytest.mark.usefixtures("simulator_runner")
 def test_mqtt_get_location_returns_mock_gps_json(
     broker_client,
     mqtt_gps_cmd_topic: str,

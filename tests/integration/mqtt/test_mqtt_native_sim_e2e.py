@@ -12,9 +12,9 @@ import pytest
 @pytest.mark.e2e
 def test_take_photo_mqtt_command_reaches_transport(
     broker_client,
-    native_sim_dut,
+    simulator_runner,
     mqtt_transport_subscribe_topic: str,
 ) -> None:
     broker_client.drain()
     broker_client.publish(mqtt_transport_subscribe_topic, "take_photo", qos=1)
-    native_sim_dut.wait_for_substring("Published take_photo command to camera", timeout=30.0)
+    simulator_runner.wait_for_substring("Published take_photo command to camera", timeout=30.0)

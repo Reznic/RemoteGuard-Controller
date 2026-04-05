@@ -10,12 +10,12 @@ import subprocess
 import threading
 import time
 from pathlib import Path
+
 import pytest
 
 
-
 def native_sim_log_file_path() -> Path:
-    """Where CI / local runs persist captured native_sim stdout (see conftest native_sim_dut)."""
+    """Where CI / local runs persist captured native_sim stdout (see conftest simulator_runner)."""
     env = os.environ.get("INTEGRATION_NATIVE_SIM_LOG")
     if env:
         return Path(env)
@@ -23,10 +23,10 @@ def native_sim_log_file_path() -> Path:
     return here / "artifacts" / "native_sim_stdout.log"
 
 
-class NativeSimDut:
+class SimulatorRunner:
     APP_BOOT_MSG = "Booting nRF Connect"
     LOG_ERR_MARKER = "<err>"
-    
+
     def __init__(self, executable: Path) -> None:
         self._executable = executable
         self._proc: subprocess.Popen[str] | None = None
@@ -72,11 +72,11 @@ class NativeSimDut:
         for line in self._proc.stdout:
             with self._stdout_lock:
                 self._lines.append(line)
-    
+
     def joined_output(self) -> str:
         with self._stdout_lock:
             return "".join(self._lines)
-    
+
     def wait_for_substring(self, needle: str, timeout: float = 120.0) -> None:
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
@@ -88,11 +88,13 @@ class NativeSimDut:
     def log_file_path(self) -> Path:
         return self._log_file_path
 
-    def find_error_logs(self, log: str) -> list[str]:
+    def find_error_logs(self) -> list[str]:
         """Return stripped lines that contain Zephyr error-level log marker."""
-        return [line.rstrip("\n\r") 
-                for line in self.joined_output().splitlines() 
-                if self.LOG_ERR_MARKER in line]
+        return [
+            line.rstrip("\n\r")
+            for line in self.joined_output().splitlines()
+            if self.LOG_ERR_MARKER in line
+        ]
 
     def assert_no_error_logs(self) -> None:
         """Fail the current test if the log contains any errors"""
