@@ -16,18 +16,6 @@ config MQTT_SAMPLE_GNSS_MOCK
 
 if MQTT_SAMPLE_GNSS_MOCK
 
-config MQTT_SAMPLE_GNSS_MOCK_LATITUDE
-	string "Mock latitude (decimal degrees)"
-	default "59.913900"
-
-config MQTT_SAMPLE_GNSS_MOCK_LONGITUDE
-	string "Mock longitude (decimal degrees)"
-	default "10.752200"
-
-config MQTT_SAMPLE_GNSS_MOCK_ACCURACY
-	string "Mock horizontal accuracy (meters)"
-	default "5.0"
-
 config MQTT_SAMPLE_GNSS_MOCK_THREAD_STACK_SIZE
 	int "Mock GNSS thread stack size"
 	default 2048

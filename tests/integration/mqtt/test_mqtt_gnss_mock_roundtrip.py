@@ -9,12 +9,6 @@ import json
 
 import pytest
 
-from kconfig_utils import (
-    get_gnss_mock_accuracy,
-    get_gnss_mock_latitude,
-    get_gnss_mock_longitude,
-)
-
 
 @pytest.mark.mqtt
 @pytest.mark.e2e
@@ -22,12 +16,12 @@ from kconfig_utils import (
 def test_mqtt_get_location_returns_mock_gps_json(
     broker_client,
     mqtt_gps_cmd_topic: str,
-    mqtt_gps_data_topic: str,
-    kconfig: dict[str, str],
+    mqtt_gps_data_topic: str
 ) -> None:
-    expected_lat = get_gnss_mock_latitude(kconfig)
-    expected_lon = get_gnss_mock_longitude(kconfig)
-    expected_acc = get_gnss_mock_accuracy(kconfig)
+    # Must match GNSS_MOCK_* in tests/utils/gnss_mock.c
+    expected_lat = 59.913900
+    expected_lon = 10.752200
+    expected_acc = 5.0
 
     broker_client.drain()
     broker_client.subscribe(mqtt_gps_data_topic, qos=1)

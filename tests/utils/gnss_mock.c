@@ -4,10 +4,8 @@
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  *
  * GNSS test double for integration builds (CONFIG_MQTT_SAMPLE_GNSS_MOCK=y).
+ * Fixed coordinates — duplicate in tests/integration/mqtt/test_mqtt_gnss_mock_roundtrip.py.
  */
-
-#include <stdlib.h>
-
 #include <zephyr/kernel.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/zbus/zbus.h>
@@ -18,16 +16,12 @@ LOG_MODULE_REGISTER(gnss_mock, CONFIG_MQTT_SAMPLE_GNSS_MOCK_LOG_LEVEL);
 
 ZBUS_SUBSCRIBER_DEFINE(gnss, CONFIG_MQTT_SAMPLE_GNSS_MOCK_MESSAGE_QUEUE_SIZE);
 
-static struct gps_data mock_gps_from_kconfig(void)
-{
-	struct gps_data gps;
-
-	gps.latitude = strtod(CONFIG_MQTT_SAMPLE_GNSS_MOCK_LATITUDE, NULL);
-	gps.longitude = strtod(CONFIG_MQTT_SAMPLE_GNSS_MOCK_LONGITUDE, NULL);
-	gps.accuracy = (float)strtod(CONFIG_MQTT_SAMPLE_GNSS_MOCK_ACCURACY, NULL);
-
-	return gps;
-}
+/* Must match GNSS_MOCK_* in test_mqtt_gnss_mock_roundtrip.py */
+struct gps_data fake_gps_data = {
+	.latitude = 59.913900,
+	.longitude = 10.752200,
+	.accuracy = 5.0f
+};
 
 static void gnss_task(void)
 {
@@ -50,12 +44,11 @@ static void gnss_task(void)
 
 		switch (cmd) {
 		case GNSS_CMD_GET_LOCATION: {
-			struct gps_data gps = mock_gps_from_kconfig();
 
 			LOG_INF("GNSS mock: publishing fixed fix lat=%f lon=%f", gps.latitude,
 				gps.longitude);
 
-			err = zbus_chan_pub(&GPS_DATA_CHAN, &gps, K_SECONDS(1));
+			err = zbus_chan_pub(&GPS_DATA_CHAN, &fake_gps_data, K_SECONDS(1));
 			if (err) {
 				LOG_ERR("Failed to publish mock GPS data: %d", err);
 			}

@@ -82,18 +82,6 @@ def get_mqtt_gps_data_suffix(cfg: dict[str, str]) -> str:
     return cfg.get("CONFIG_MQTT_GPS_DATA_TOPIC", "device/gps")
 
 
-def get_gnss_mock_latitude(cfg: dict[str, str]) -> float:
-    return float(cfg.get("CONFIG_MQTT_SAMPLE_GNSS_MOCK_LATITUDE", "59.913900"))
-
-
-def get_gnss_mock_longitude(cfg: dict[str, str]) -> float:
-    return float(cfg.get("CONFIG_MQTT_SAMPLE_GNSS_MOCK_LONGITUDE", "10.752200"))
-
-
-def get_gnss_mock_accuracy(cfg: dict[str, str]) -> float:
-    return float(cfg.get("CONFIG_MQTT_SAMPLE_GNSS_MOCK_ACCURACY", "5.0"))
-
-
 def find_native_sim_executable(build_dir: Path) -> Optional[Path]:
     """Return the native_sim host runner under zephyr/ (Linux or Windows name)."""
     for name in ("zephyr", "zephyr.exe"):
