@@ -71,6 +71,8 @@ jobs:
       - name: Integration tests
         working-directory: nrf9151-connectkit
         shell: bash
+        env:
+          INTEGRATION_FETCH_NET_TOOLS: "1"
         run: ./scripts/run_integration_tests.sh -v
 
       - name: Upload test logs
