@@ -65,11 +65,12 @@ class NativeSimDut:
             self._proc.kill()
             self._proc.wait(timeout=5)
         self._proc = None
+        self._log_file_path.write_text(self.joined_output(), encoding="utf-8")
 
     def joined_output(self) -> str:
         with self._lock:
             return "".join(self._lines)
-
+    
     def wait_for_substring(self, needle: str, timeout: float = 120.0) -> None:
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
