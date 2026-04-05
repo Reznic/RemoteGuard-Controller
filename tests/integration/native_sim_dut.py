@@ -5,10 +5,23 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 import threading
 import time
 from pathlib import Path
+
+# Substring of LOG_INF in app/src/modules/network/network.c — printed once network_task runs.
+NATIVE_SIM_APP_BOOT_LOG_LINE = "Bringing network interface up and connecting to the network"
+
+
+def native_sim_log_file_path() -> Path:
+    """Where CI / local runs persist captured native_sim stdout (see conftest native_sim_dut)."""
+    env = os.environ.get("INTEGRATION_NATIVE_SIM_LOG")
+    if env:
+        return Path(env)
+    here = Path(__file__).resolve().parent
+    return here / "artifacts" / "native_sim_stdout.log"
 
 
 class NativeSimDut:
@@ -18,10 +31,12 @@ class NativeSimDut:
         self._lines: list[str] = []
         self._lock = threading.Lock()
         self._reader: threading.Thread | None = None
+        self._log_file_path = native_sim_log_file_path()
 
     def start(self) -> None:
         if self._proc is not None:
             return
+        self._log_file_path.parent.mkdir(parents=True, exist_ok=True)
         self._proc = subprocess.Popen(
             [str(self._executable)],
             stdout=subprocess.PIPE,
@@ -62,3 +77,6 @@ class NativeSimDut:
                 return
             time.sleep(0.15)
         raise TimeoutError(f"Timeout waiting for {needle!r} in native_sim output")
+
+    def log_file_path(self) -> Path:
+        return self._log_file_path

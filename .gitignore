@@ -15,6 +15,7 @@ firmware
 
 # tests
 tests/factory_test
+tests/integration/artifacts/
 
 __pycache__/
 

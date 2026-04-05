@@ -9,7 +9,11 @@ from typing import Generator
 
 import pytest
 
-from native_sim_dut import NativeSimDut
+from native_sim_dut import (
+    NATIVE_SIM_APP_BOOT_LOG_LINE,
+    NativeSimDut,
+    native_sim_log_file_path,
+)
 
 from kconfig_utils import (
     find_native_sim_executable,
@@ -107,11 +111,20 @@ def native_sim_dut(zephyr_build_dir: Path | None) -> Generator[NativeSimDut, Non
 
     dut = NativeSimDut(exe)
     dut.start()
+    
+    try:
+        # Confirms Zephyr + app threads started (see network.c).
+        dut.wait_for_substring(NATIVE_SIM_APP_BOOT_LOG_LINE, timeout=30.0)
+    except TimeoutError as e:
+        dut.stop()
+        pytest.fail(f"Zephyr app did not boot on simulator: {e}")
+
     try:
         dut.wait_for_substring("Connected to MQTT broker", timeout=120.0)
         yield dut
+
     except TimeoutError as e:
-        pytest.fail(f"Timeout waiting for MQTT connected log line: {e}")
+        pytest.fail(f"App failed to connect to mqtt broker: {e}")
     finally:
         dut.stop()
 

@@ -59,6 +59,14 @@ jobs:
         shell: bash
         run: ./scripts/run_integration_tests.sh -v
 
+      - name: Upload native_sim integration stdout
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-sim-integration-log
+          path: nrf9151-connectkit/tests/integration/artifacts/native_sim_stdout.log
+          if-no-files-found: ignore
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
