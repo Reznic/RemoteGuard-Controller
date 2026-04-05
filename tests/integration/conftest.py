@@ -9,35 +9,46 @@ from typing import Any, Generator
 
 import pytest
 
+# TestReport / CollectReport do not expose .config in all pytest versions; stash
+# the active Config from pytest_configure for GitHub Actions summary hooks.
+_integration_config: pytest.Config | None = None
+
 
 def pytest_configure(config: pytest.Config) -> None:
+    global _integration_config
+    _integration_config = config
     config._integration_github_failures = []  # type: ignore[attr-defined]
 
 
 def pytest_runtest_logreport(report: Any) -> None:
+    cfg = _integration_config
+    if cfg is None:
+        return
     if report.outcome != "failed" or report.when not in ("setup", "call", "teardown"):
         return
     if not os.environ.get("GITHUB_STEP_SUMMARY"):
         return
     failures: list[tuple[str, str, str]] = getattr(
-        report.config, "_integration_github_failures", []
+        cfg, "_integration_github_failures", []
     )
     failures.append((report.nodeid, report.when, str(report.longrepr)))
-    report.config._integration_github_failures = failures  # type: ignore[attr-defined]
+    cfg._integration_github_failures = failures  # type: ignore[attr-defined]
 
 
 def pytest_collectreport(report: Any) -> None:
+    cfg = _integration_config
+    if cfg is None:
+        return
     if report.outcome != "failed":
         return
     if not os.environ.get("GITHUB_STEP_SUMMARY"):
         return
-    config = report.config
     failures: list[tuple[str, str, str]] = getattr(
-        config, "_integration_github_failures", []
+        cfg, "_integration_github_failures", []
     )
     nodeid = getattr(report, "nodeid", "collection")
     failures.append((nodeid, "collect", str(report.longrepr)))
-    config._integration_github_failures = failures  # type: ignore[attr-defined]
+    cfg._integration_github_failures = failures  # type: ignore[attr-defined]
 
 
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
@@ -75,6 +86,10 @@ from kconfig_utils import (
     get_mqtt_transport_subscribe_suffix,
     load_build_config,
 )
+
+
+def _zephyr_dotconfig_ok(build_dir: Path) -> bool:
+    return (build_dir / "zephyr" / ".config").is_file()
 
 
 @pytest.fixture(scope="session")
