@@ -87,13 +87,17 @@ def zephyr_build_dir() -> Path | None:
     """
     here = Path(__file__).resolve().parent
     repo = here.parent.parent
-    integration = repo / "build-native-sim" / "app"
+    build_native_sim = repo / "build-native-sim"
+    integration_app = build_native_sim / "app"
     env_integration = os.environ.get("INTEGRATION_ZEPHYR_BUILD_DIR")
     if env_integration:
         p = Path(env_integration)
         return p if (p / "zephyr" / ".config").is_file() else None
-    if (integration / "zephyr" / ".config").is_file():
-        return integration
+    # west build -d build-native-sim puts .config here (not under build-native-sim/app/)
+    if (build_native_sim / "zephyr" / ".config").is_file():
+        return build_native_sim
+    if (integration_app / "zephyr" / ".config").is_file():
+        return integration_app
     env = os.environ.get("ZEPHYR_BUILD_DIR")
     if env:
         p = Path(env)
