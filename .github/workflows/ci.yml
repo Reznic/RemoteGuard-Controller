@@ -54,7 +54,7 @@ jobs:
 
       # 32-bit native_sim (-m32) needs multilib + 32-bit libc headers for the NSI runner link.
       - name: Host packages for native_sim (32-bit x86)
-        run: sudo apt-get update && sudo apt-get install -y gcc-multilib libc6-dev-i386 libcap2-bin
+        run: sudo apt-get update && sudo apt-get install -y gcc-multilib libc6-dev-i386 libcap2-bin iptables
 
       - name: Build Twister Application
         working-directory: nrf9151-connectkit
