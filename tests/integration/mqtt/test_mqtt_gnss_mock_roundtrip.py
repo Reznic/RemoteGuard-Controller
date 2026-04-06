@@ -1,7 +1,7 @@
 # Copyright (c) 2023 Nordic Semiconductor ASA
 # SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
 
-"""MQTT get_location command → GPS JSON on data topic (GNSS mock on native_sim)."""
+"""MQTT get_location command → GPS JSON on data topic (modem GNSS stubs on native_sim)."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ def test_mqtt_get_location_returns_mock_gps_json(
     mqtt_gps_cmd_topic: str,
     mqtt_gps_data_topic: str
 ) -> None:
-    # Must match GNSS_MOCK_* in tests/utils/gnss_mock.c
+    # Must match STUB_* in tests/utils/gnss_modem_mock.c
     expected_lat = 59.913900
     expected_lon = 10.752200
     expected_acc = 5.0
