@@ -45,8 +45,8 @@ static void gnss_task(void)
 		switch (cmd) {
 		case GNSS_CMD_GET_LOCATION: {
 
-			LOG_INF("GNSS mock: publishing fixed fix lat=%f lon=%f", gps.latitude,
-				gps.longitude);
+			LOG_INF("GNSS mock: publishing fake lat=%f lon=%f", fake_gps_data.latitude,
+				fake_gps_data.longitude);
 
 			err = zbus_chan_pub(&GPS_DATA_CHAN, &fake_gps_data, K_SECONDS(1));
 			if (err) {
