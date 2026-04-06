@@ -1,7 +1,5 @@
 /*
- * Copyright (c) 2023 Nordic Semiconductor ASA
- *
- * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+ * Mock for the modem GNSS API.
  *
  * native_sim: no modem. Delivers one synthetic PVT with a valid fix.
  * Coordinates must match tests/integration/mqtt/test_mqtt_gnss_mock_roundtrip.py.

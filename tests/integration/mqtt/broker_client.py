@@ -79,6 +79,17 @@ class BrokerClient:
             time.sleep(poll)
         raise TimeoutError("No matching MQTT message received")
 
+    def wait_for_message_on_topic(self, topic: str, timeout: float = 30.0, poll: float = 0.05) -> bytes:
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            with self._lock:
+                for i, (_topic, payload) in enumerate(self._messages):
+                    if _topic == topic:
+                        del self._messages[i]
+                        return payload
+            time.sleep(poll)
+        raise TimeoutError(f"Timeout receiving message on topic {topic}")
+
     def drain(self) -> None:
         with self._lock:
             self._messages.clear()
