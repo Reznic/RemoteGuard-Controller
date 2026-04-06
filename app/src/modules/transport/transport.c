@@ -10,6 +10,7 @@
 #include <zephyr/smf.h>
 #include <net/mqtt_helper.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <string.h>
 
 #include "client_id.h"
@@ -296,16 +297,51 @@ static void publish_camera_chunk(struct camera_chunk *chunk)
 	}
 }
 
+/* Picolibc maps snprintk → snprintf; without PICOLIBC_IO_FLOAT, %f becomes "*float*". */
+static void split_fixed(double v, unsigned int dec, int *ip_out, unsigned int *fp_out,
+			bool *neg_out)
+{
+	int64_t scale = 1;
+
+	for (unsigned int i = 0; i < dec; i++) {
+		scale *= 10;
+	}
+
+	double rounded = v * (double)scale + (v >= 0.0 ? 0.5 : -0.5);
+	int64_t scaled = (int64_t)rounded;
+
+	*neg_out = scaled < 0;
+	if (*neg_out) {
+		scaled = -scaled;
+	}
+
+	*ip_out = (int)(scaled / scale);
+	*fp_out = (unsigned int)(scaled % scale);
+}
+
 /* Publish GPS data over MQTT */
 static void publish_gps_data(struct gps_data *gps)
 {
 	int err;
 	char gps_json[128];
 	int len;
+	int lat_i, lon_i;
+	unsigned int lat_f, lon_f;
+	bool lat_neg, lon_neg;
+	int acc10;
+
+	split_fixed(gps->latitude, 6, &lat_i, &lat_f, &lat_neg);
+	split_fixed(gps->longitude, 6, &lon_i, &lon_f, &lon_neg);
+
+	acc10 = (int)((double)gps->accuracy * 10.0 + 0.5);
+	if (acc10 < 0) {
+		acc10 = 0;
+	}
 
 	len = snprintk(gps_json, sizeof(gps_json),
-			"{\"lat\":%.6f,\"lon\":%.6f,\"accuracy\":%.1f}",
-			(double)gps->latitude, (double)gps->longitude, (double)gps->accuracy);
+		       "{\"lat\":%s%d.%06u,\"lon\":%s%d.%06u,\"accuracy\":%d.%d}",
+		       lat_neg ? "-" : "", lat_i, lat_f, lon_neg ? "-" : "", lon_i, lon_f,
+		       acc10 / 10, acc10 % 10);
 	if (len < 0 || len >= sizeof(gps_json)) {
 		LOG_ERR("GPS JSON buffer too small");
 		return;
