@@ -83,6 +83,14 @@ jobs:
           path: nrf9151-connectkit/tests/integration/artifacts/native_sim_stdout.log
           if-no-files-found: ignore
 
+      - name: Upload integration coverage HTML
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-coverage-html
+          path: nrf9151-connectkit/tests/integration/artifacts/coverage-html/
+          if-no-files-found: ignore
+
       - name: Upload firmware binary
         uses: actions/upload-artifact@v4
         with:

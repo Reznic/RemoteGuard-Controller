@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import os
+import signal
 import subprocess
 import threading
 import time
@@ -57,12 +58,17 @@ class SimulatorRunner:
     def stop(self) -> None:
         if self._proc is None:
             return
-        self._proc.terminate()
+        # Gcov writes .gcda on normal process exit; SIGINT tends to flush before SIGTERM.
+        self._proc.send_signal(signal.SIGINT)
         try:
-            self._proc.wait(timeout=15)
+            self._proc.wait(timeout=10.0)
         except subprocess.TimeoutExpired:
-            self._proc.kill()
-            self._proc.wait(timeout=5)
+            self._proc.terminate()
+            try:
+                self._proc.wait(timeout=15)
+            except subprocess.TimeoutExpired:
+                self._proc.kill()
+                self._proc.wait(timeout=5)
         self._proc = None
         self._log_file_path.write_text(self.joined_output(), encoding="utf-8")
 

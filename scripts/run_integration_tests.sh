@@ -22,6 +22,7 @@
 #   INTEGRATION_FETCH_NET_TOOLS  If 1 (or GITHUB_ACTIONS is set), clone net-tools into .integration-net-tools when missing
 #   SKIP_NET_SETUP  If 1, do not run net-setup.sh (only setcap / manual TAP setup)
 #   SKIP_NAT  If 1, do not enable IPv4 MASQUERADE / forwarding for zeth (public MQTT/DNS will not work from the DUT)
+#   GCOV_EXE  Optional gcov binary for gcovr when it does not match the native_sim compiler (rare; Ubuntu host gcc is usually fine).
 
 set -euo pipefail
 
@@ -215,4 +216,13 @@ apply_native_sim_net_caps() {
 apply_native_sim_net_caps
 
 pip install -q -r tests/integration/requirements.txt
-pytest tests/integration -m mqtt "$@"
+
+_pytest_status=0
+pytest tests/integration -m mqtt "$@" || _pytest_status=$?
+
+# Collect gcov after tests (even if pytest failed).
+python3 "${ROOT}/scripts/integration_coverage_report.py" \
+	--repo-root "${ROOT}" \
+	--build-dir "${ZEPHYR_BUILD_DIR}" || true
+
+exit "${_pytest_status}"
