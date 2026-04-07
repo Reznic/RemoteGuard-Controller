@@ -6,8 +6,9 @@ from __future__ import annotations
 import os
 from pathlib import Path
 from typing import Any, Generator
-
 import pytest
+
+from broker_client import BrokerClient
 
 # TestReport / CollectReport do not expose .config in all pytest versions; stash
 # the active Config from pytest_configure for GitHub Actions summary hooks.
@@ -135,7 +136,6 @@ def integration_device_id(kconfig: dict[str, str]) -> str:
 def broker_client(
     mqtt_broker_host: str,
 ) -> Generator["BrokerClient", None, None]:
-    from mqtt.broker_client import BrokerClient
 
     client = BrokerClient(hostname=mqtt_broker_host, port=1883)
     client.connect()
