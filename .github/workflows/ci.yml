@@ -1,17 +1,33 @@
 # Copyright (c) 2016-2025 Makerdiary <https://makerdiary.com>
-name: Twister Apps & Samples
+name: CI pipeline
 
+# PR branches: only pull_request runs (not push), so each update triggers a single workflow.
+# Default branch: push runs when commits land on main (merge or direct push).
 on:
-  push:
+  pull_request:
     paths:
       - 'app/**'
       - 'boards/**'
       - 'zephyr/**'
+      - 'tests/**'
+      - 'scripts/**'
       - 'CMakeLists.txt'
       - 'Kconfig'
       - 'VERSION'
       - 'west.yml'
-  pull_request:
+  push:
+    branches:
+      - main
+    paths:
+      - 'app/**'
+      - 'boards/**'
+      - 'zephyr/**'
+      - 'tests/**'
+      - 'scripts/**'
+      - 'CMakeLists.txt'
+      - 'Kconfig'
+      - 'VERSION'
+      - 'west.yml'
   # schedule:
     # Run at 03:00 UTC on every Sunday
     # - cron: "0 3 * * 0"
@@ -36,13 +52,46 @@ jobs:
           app-path: nrf9151-connectkit
           toolchains: arm-zephyr-eabi
 
-      - name: Twister Application
+      # 32-bit native_sim (-m32) needs multilib + 32-bit libc headers for the NSI runner link.
+      - name: Host packages for native_sim (32-bit x86)
+        run: sudo apt-get update && sudo apt-get install -y gcc-multilib libc6-dev-i386 libcap2-bin iptables
+
+      - name: Build Twister Application
         working-directory: nrf9151-connectkit
         shell: bash
         run: |
           west twister -T app -v --inline-logs --integration
 
-      - name: Upload artifacts
+      - name: Unit tests
+        working-directory: nrf9151-connectkit
+        shell: bash
+        run: |
+          west twister -T tests/ztest/topic_format -v --inline-logs -p native_sim
+
+      - name: Integration tests
+        working-directory: nrf9151-connectkit
+        shell: bash
+        env:
+          INTEGRATION_FETCH_NET_TOOLS: "1"
+        run: ./scripts/run_integration_tests.sh -v
+
+      - name: Upload test logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-log
+          path: nrf9151-connectkit/tests/integration/artifacts/native_sim_stdout.log
+          if-no-files-found: ignore
+
+      - name: Upload integration coverage HTML
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-coverage-html
+          path: nrf9151-connectkit/tests/integration/artifacts/coverage-html/
+          if-no-files-found: ignore
+
+      - name: Upload firmware binary
         uses: actions/upload-artifact@v4
         with:
           name: connectkit-firmware

@@ -10,6 +10,7 @@
 #include <zephyr/smf.h>
 #include <net/mqtt_helper.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <string.h>
 
 #include "client_id.h"
@@ -46,7 +47,6 @@ enum module_state { MQTT_CONNECTED, MQTT_DISCONNECTED };
 /* MQTT client ID buffer */
 static char client_id[CONFIG_MQTT_SAMPLE_TRANSPORT_CLIENT_ID_BUFFER_SIZE];
 
-static uint8_t pub_topic[sizeof(client_id) + sizeof(CONFIG_MQTT_SAMPLE_TRANSPORT_PUBLISH_TOPIC)];
 static uint8_t sub_topic[sizeof(client_id) + sizeof(CONFIG_MQTT_SAMPLE_TRANSPORT_SUBSCRIBE_TOPIC)];
 static uint8_t get_gps_topic[sizeof(client_id) + sizeof(CONFIG_MQTT_GPS_CMD_TOPIC)];
 static uint8_t gps_pub_topic[sizeof(client_id) + sizeof(CONFIG_MQTT_GPS_DATA_TOPIC)];
@@ -63,9 +63,6 @@ static struct s_object {
 
 	/* Network status */
 	enum network_status status;
-
-	/* Payload */
-	struct payload payload;
 } s_obj;
 
 /* Callback handlers from MQTT helper library.
@@ -197,13 +194,6 @@ static int topics_prefix(void)
 {
 	int len;
 
-	len = snprintk(pub_topic, sizeof(pub_topic), "%s/%s", client_id,
-		       CONFIG_MQTT_SAMPLE_TRANSPORT_PUBLISH_TOPIC);
-	if ((len < 0) || (len >= sizeof(pub_topic))) {
-		LOG_ERR("Publish topic buffer too small");
-		return -EMSGSIZE;
-	}
-
 	len = snprintk(sub_topic, sizeof(sub_topic), "%s/%s", client_id,
 		       CONFIG_MQTT_SAMPLE_TRANSPORT_SUBSCRIBE_TOPIC);
 	if ((len < 0) || (len >= sizeof(sub_topic))) {
@@ -224,31 +214,6 @@ static int topics_prefix(void)
 	}
 
 	return 0;
-}
-
-static void publish(struct payload *payload)
-{
-	int err;
-
-	struct mqtt_publish_param param = {
-		.message.payload.data = payload->string,
-		.message.payload.len = strlen(payload->string),
-		.message.topic.qos = MQTT_QOS_1_AT_LEAST_ONCE,
-		.message_id = mqtt_helper_msg_id_get(),
-		.message.topic.topic.utf8 = pub_topic,
-		.message.topic.topic.size = strlen(pub_topic),
-	};
-
-	err = mqtt_helper_publish(&param);
-	if (err) {
-		LOG_WRN("Failed to send payload, err: %d", err);
-		return;
-	}
-
-	LOG_INF("Published message: \"%.*s\" on topic: \"%.*s\"", param.message.payload.len,
-								  param.message.payload.data,
-								  param.message.topic.topic.size,
-								  param.message.topic.topic.utf8);
 }
 
 /* Publish camera chunk over MQTT */
@@ -332,16 +297,51 @@ static void publish_camera_chunk(struct camera_chunk *chunk)
 	}
 }
 
+/* Picolibc maps snprintk → snprintf; without PICOLIBC_IO_FLOAT, %f becomes "*float*". */
+static void split_fixed(double v, unsigned int dec, int *ip_out, unsigned int *fp_out,
+			bool *neg_out)
+{
+	int64_t scale = 1;
+
+	for (unsigned int i = 0; i < dec; i++) {
+		scale *= 10;
+	}
+
+	double rounded = v * (double)scale + (v >= 0.0 ? 0.5 : -0.5);
+	int64_t scaled = (int64_t)rounded;
+
+	*neg_out = scaled < 0;
+	if (*neg_out) {
+		scaled = -scaled;
+	}
+
+	*ip_out = (int)(scaled / scale);
+	*fp_out = (unsigned int)(scaled % scale);
+}
+
 /* Publish GPS data over MQTT */
 static void publish_gps_data(struct gps_data *gps)
 {
 	int err;
 	char gps_json[128];
 	int len;
+	int lat_i, lon_i;
+	unsigned int lat_f, lon_f;
+	bool lat_neg, lon_neg;
+	int acc10;
+
+	split_fixed(gps->latitude, 6, &lat_i, &lat_f, &lat_neg);
+	split_fixed(gps->longitude, 6, &lon_i, &lon_f, &lon_neg);
+
+	acc10 = (int)((double)gps->accuracy * 10.0 + 0.5);
+	if (acc10 < 0) {
+		acc10 = 0;
+	}
 
 	len = snprintk(gps_json, sizeof(gps_json),
-			"{\"lat\":%.6f,\"lon\":%.6f,\"accuracy\":%.1f}",
-			(double)gps->latitude, (double)gps->longitude, (double)gps->accuracy);
+		       "{\"lat\":%s%d.%06u,\"lon\":%s%d.%06u,\"accuracy\":%d.%d}",
+		       lat_neg ? "-" : "", lat_i, lat_f, lon_neg ? "-" : "", lon_i, lon_f,
+		       acc10 / 10, acc10 % 10);
 	if (len < 0 || len >= sizeof(gps_json)) {
 		LOG_ERR("GPS JSON buffer too small");
 		return;
@@ -628,12 +628,6 @@ static void connected_run(void *o)
 		(void)mqtt_helper_disconnect();
 		return;
 	}
-
-	if (user_object->chan != &PAYLOAD_CHAN) {
-		return;
-	}
-
-	publish(&user_object->payload);
 }
 
 /* Function executed when the module exits the connected state. */
@@ -657,7 +651,6 @@ static void transport_task(void)
 	int err;
 	const struct zbus_channel *chan;
 	enum network_status status;
-	struct payload payload;
 	struct mqtt_helper_cfg cfg = {
 		.cb = {
 			.on_connack = on_mqtt_connack,
@@ -701,18 +694,6 @@ static void transport_task(void)
 			}
 
 			s_obj.status = status;
-		}
-
-		else if (&PAYLOAD_CHAN == chan) {
-
-			err = zbus_chan_read(&PAYLOAD_CHAN, &payload, K_SECONDS(1));
-			if (err) {
-				LOG_ERR("zbus_chan_read, error: %d", err);
-				SEND_FATAL_ERROR();
-				return;
-			}
-
-			s_obj.payload = payload;
 		}
 
 		else if (&CAMERA_CHUNK_CHAN == chan) {
