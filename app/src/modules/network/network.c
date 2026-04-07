@@ -8,9 +8,14 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/zbus/zbus.h>
 #include <zephyr/net/conn_mgr_connectivity.h>
-#include <zephyr/net/conn_mgr_monitor.h>
+#include <zephyr/toolchain.h>
 
 #include "message_channel.h"
+
+/* Strong definition may be provided by tests/mocks/network_native_sim_fixup.c */
+__weak void network_after_connect_hook(void)
+{
+}
 
 /* Register log module */
 LOG_MODULE_REGISTER(network, CONFIG_APP_LOG_LEVEL);
@@ -95,15 +100,8 @@ static void network_task(void)
 		return;
 	}
 
-	/* Resend connection status if the sample is built for Native Sim.
-	 * This is necessary because the network interface is automatically brought up
-	 * at SYS_INIT() before main() is called.
-	 * This means that NET_EVENT_L4_CONNECTED fires before the
-	 * appropriate handler l4_event_handler() is registered.
-	 */
-	if (IS_ENABLED(CONFIG_BOARD_NATIVE_SIM)) {
-		conn_mgr_mon_resend_status();
-	}
+	/* Native_sim: see tests/mocks/network_native_sim_fixup.c */
+	network_after_connect_hook();
 }
 
 K_THREAD_DEFINE(network_task_id,

@@ -41,17 +41,22 @@ config MQTT_SAMPLE_TRANSPORT_CLIENT_ID
 	help
 	  Use a custom client ID string. If not set, the client ID will default to the
 	  modem's IMEI number for nRF91 Series devices, MAC address for nRF7 Series devices,
-	  or a random number for Native Sim.
+	  or use APP_CLIENT_ID_FALLBACK_RANDOM when enabled.
+
+config APP_CLIENT_ID_FALLBACK_RANDOM
+	bool "Use random MQTT client id when MQTT client id string is empty"
+	default y if BOARD_NATIVE_SIM
+	default n
+	help
+	  If the MQTT client id string is empty, fill the buffer using sys_rand32_get().
+	  Enable for host simulation builds that have no hw_id; hardware builds typically
+	  use IMEI/MAC via hw_id instead.
 
 config MQTT_SAMPLE_TRANSPORT_CLIENT_ID_BUFFER_SIZE
 	int "MQTT Client ID buffer size"
 	default 50
 	help
 	  Size of buffer used to store the MQTT client ID.
-
-config MQTT_SAMPLE_TRANSPORT_PUBLISH_TOPIC
-	string "MQTT publish topic"
-	default "my/publish/topic"
 
 config MQTT_SAMPLE_TRANSPORT_SUBSCRIBE_TOPIC
 	string "MQTT subscribe topic"

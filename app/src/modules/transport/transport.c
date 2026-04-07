@@ -7,6 +7,7 @@
 #include <net/mqtt_client.h>
 #include <zephyr/net/mqtt.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <string.h>
 
 #include "client_id.h"
@@ -45,7 +46,6 @@ enum module_state { MQTT_CONNECTED, MQTT_DISCONNECTED };
 /* MQTT client ID buffer (shared with publish_msg_factory.c) */
 char client_id[CONFIG_MQTT_SAMPLE_TRANSPORT_CLIENT_ID_BUFFER_SIZE];
 
-uint8_t pub_topic[sizeof(client_id) + sizeof(CONFIG_MQTT_SAMPLE_TRANSPORT_PUBLISH_TOPIC)];
 static uint8_t sub_topic[sizeof(client_id) + sizeof(CONFIG_MQTT_SAMPLE_TRANSPORT_SUBSCRIBE_TOPIC)];
 static uint8_t get_gps_topic[sizeof(client_id) + sizeof(CONFIG_MQTT_GPS_CMD_TOPIC)];
 uint8_t gps_pub_topic[sizeof(client_id) + sizeof(CONFIG_MQTT_GPS_DATA_TOPIC)];
@@ -79,9 +79,6 @@ static struct s_object {
 
 	/* Network status */
 	enum network_status network_connection_status;
-
-	/* Payload */
-	struct payload payload;
 } s_obj;
 
 /* Callback handlers from local mqtt_client library.
@@ -257,13 +254,6 @@ static void on_mqtt_suback(uint16_t message_id, int result)
 static int topics_prefix(void)
 {
 	int len;
-
-	len = snprintk(pub_topic, sizeof(pub_topic), "%s/%s", client_id,
-		       CONFIG_MQTT_SAMPLE_TRANSPORT_PUBLISH_TOPIC);
-	if ((len < 0) || (len >= sizeof(pub_topic))) {
-		LOG_ERR("Publish topic buffer too small");
-		return -EMSGSIZE;
-	}
 
 	len = snprintk(sub_topic, sizeof(sub_topic), "%s/%s", client_id,
 		       CONFIG_MQTT_SAMPLE_TRANSPORT_SUBSCRIBE_TOPIC);
@@ -445,10 +435,6 @@ static void mqtt_connected_run(void *o)
 		(void)mqtt_client_disconnect();
 		return;
 	}
-
-	if (ctx->chan != &PAYLOAD_CHAN) {
-		return;
-	}
 	mqtt_client_publish_str(pub_topic, ctx->payload.string);
 }
 
@@ -473,8 +459,7 @@ static void transport_task(void)
 	int err;
 	const struct zbus_channel *chan;
 	enum network_status status;
-	struct payload payload;
-	struct mqtt_client_cfg cfg = {
+	struct mqtt_helper_cfg cfg = {
 		.cb = {
 			.on_connack = on_mqtt_connack,
 			.on_disconnect = on_mqtt_disconnect,
@@ -517,18 +502,6 @@ static void transport_task(void)
 			}
 
 			s_obj.network_connection_status = status;
-		}
-
-		else if (&PAYLOAD_CHAN == chan) {
-
-			err = zbus_chan_read(&PAYLOAD_CHAN, &payload, K_SECONDS(1));
-			if (err) {
-				LOG_ERR("zbus_chan_read, error: %d", err);
-				SEND_FATAL_ERROR();
-				return;
-			}
-
-			s_obj.payload = payload;
 		}
 
 		else if (&CAMERA_CHUNK_CHAN == chan) {

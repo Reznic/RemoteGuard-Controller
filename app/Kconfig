@@ -6,12 +6,6 @@
 
 menu "Remote guard"
 
-config MQTT_SAMPLE_PAYLOAD_CHANNEL_STRING_MAX_SIZE
-	int "Payload maximum string size"
-	default 100
-	help
-	  Maximum size of the string included messages that are sent over the payload channel.
-
 config MQTT_SAMPLE_CAMERA_CHUNK_SIZE
 	int "Camera chunk size in bytes"
 	default 1024
@@ -25,8 +19,6 @@ config APP_LOG_LEVEL
 	help
 		Log level for the application.
 
-rsource "src/modules/trigger/Kconfig.trigger"
-rsource "src/modules/sampler/Kconfig.sampler"
 rsource "src/modules/network/Kconfig.network"
 rsource "src/modules/mqtt_client/Kconfig.mqtt_client"
 rsource "src/modules/transport/Kconfig.transport"

@@ -1,0 +1,9 @@
+tests:
+  mqtt.topic_format:
+    platform_allow:
+      - native_sim
+    integration_platforms:
+      - native_sim
+    tags:
+      - ztest
+      - mqtt

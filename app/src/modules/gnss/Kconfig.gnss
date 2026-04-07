@@ -8,7 +8,8 @@ menuconfig MQTT_SAMPLE_GNSS
 	bool "Enable GNSS module"
 	default y
 	help
-	  Enable the GNSS module for GPS location tracking.
+	  Enable the GNSS module for GPS location tracking (nRF modem), or native_sim stubs
+	  (tests/mocks/gnss_modem_mock.c) for integration tests.
 
 if MQTT_SAMPLE_GNSS
 
@@ -31,8 +32,8 @@ config MQTT_SAMPLE_GNSS_FIX_TIMEOUT
 	help
 	  Maximum time to wait for a GPS fix before timing out.
 
-endif # MQTT_SAMPLE_GNSS
-
 module = MQTT_SAMPLE_GNSS
 module-str = GNSS
 source "subsys/logging/Kconfig.template.log_config"
+
+endif # MQTT_SAMPLE_GNSS

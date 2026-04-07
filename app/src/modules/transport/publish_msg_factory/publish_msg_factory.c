@@ -20,65 +20,119 @@
 
 LOG_MODULE_REGISTER(publish_msg_factory, CONFIG_APP_LOG_LEVEL);
 
+
 void publish_camera_chunk(struct camera_chunk *chunk)
 {
-	// int err;
-	// static char photo_meta_topic[sizeof(client_id) + 32];
-	// static char photo_chunk_topic[sizeof(client_id) + 64];
+	int err;
+	static char photo_meta_topic[sizeof(client_id) + 32];
+	static char photo_chunk_topic[sizeof(client_id) + 64];
+	static bool meta_published = false;
+	static uint32_t last_sequence = UINT32_MAX;
 
-	// if (chunk->sequence == 0) {
-	// 	if (!topic_vfmt(photo_meta_topic, sizeof(photo_meta_topic), "%s/camera/photo/meta",
-	// 			client_id)) {
-	// 		LOG_ERR("Photo meta topic buffer too small");
-	// 		return;
-	// 	}
+	/* Publish meta on first chunk */
+	if (chunk->sequence == 0) {
+		int len = snprintk(photo_meta_topic, sizeof(photo_meta_topic),
+				   "%s/camera/photo/meta", client_id);
+		if (len < 0 || len >= sizeof(photo_meta_topic)) {
+			LOG_ERR("Photo meta topic buffer too small");
+			return;
+		}
 
-	// 	char meta_buf[128];
-	// 	int len = snprintk(meta_buf, sizeof(meta_buf),
-	// 			   "{\"id\":%u,\"chunks\":%u,\"size\":%u}",
-	// 			   (uint32_t)k_uptime_get_32(), chunk->total_chunks, chunk->total_size);
-	// 	if (len < 0 || len >= (int)sizeof(meta_buf)) {
-	// 		LOG_ERR("Meta buffer too small");
-	// 		return;
-	// 	}
+		/* Meta payload: JSON with id, chunks, size */
+		char meta_buf[128];
+		len = snprintk(meta_buf, sizeof(meta_buf),
+			       "{\"id\":%u,\"chunks\":%u,\"size\":%u}",
+			       (uint32_t)k_uptime_get_32(), chunk->total_chunks, chunk->total_size);
+		if (len < 0 || len >= sizeof(meta_buf)) {
+			LOG_ERR("Meta buffer too small");
+			return;
+		}
 
-	// 	err = publish((const uint8_t *)photo_meta_topic, strlen(photo_meta_topic),
-	// 			   meta_buf, (size_t)len);
-	// 	if (err) {
-	// 		LOG_ERR("Failed to publish photo meta, err: %d", err);
-	// 		return;
-	// 	}
+		err = mqtt_client_publish_str(photo_meta_topic, meta_buf);
+		if (err) {
+			LOG_ERR("Failed to publish photo meta, err: %d", err);
+			return;
+		}
 
-	// 	LOG_INF("Published photo meta: %s", meta_buf);
-	// }
+		LOG_INF("Published photo meta: %s", meta_buf);
+		meta_published = true;
+	}
 
-	// err = mqtt_client_publish_str(photo_chunk_topic, chunk->data);
-	// if (err) {
-	// 	LOG_ERR("Failed to publish photo chunk %u, err: %d", chunk->sequence, err);
-	// 	return;
-	// }
+	/* Publish chunk */
+	int len = snprintk(photo_chunk_topic, sizeof(photo_chunk_topic),
+			   "%s/camera/photo/chunk/%u", client_id, chunk->sequence);
+	if (len < 0 || len >= sizeof(photo_chunk_topic)) {
+		LOG_ERR("Photo chunk topic buffer too small");
+		return;
+	}
 
-	// LOG_DBG("Published photo chunk %u/%u (%u bytes)", chunk->sequence + 1, chunk->total_chunks,
-	// 	chunk->size);
+	err = mqtt_client_publish_str(photo_chunk_topic, chunk->data);
+	if (err) {
+		LOG_ERR("Failed to publish photo chunk %u, err: %d", chunk->sequence, err);
+		return;
+	}
 
-	// if (chunk->sequence == chunk->total_chunks - 1) {
-	// 	LOG_INF("Photo upload complete: %u chunks", chunk->total_chunks);
-	// }
+	LOG_DBG("Published photo chunk %u/%u (%u bytes)", chunk->sequence + 1,
+		chunk->total_chunks, chunk->size);
+
+	/* Reset meta flag on last chunk */
+	if (chunk->sequence == chunk->total_chunks - 1) {
+		meta_published = false;
+		last_sequence = UINT32_MAX;
+		LOG_INF("Photo upload complete: %u chunks", chunk->total_chunks);
+	}
 }
 
+/* Picolibc maps snprintk → snprintf; without PICOLIBC_IO_FLOAT, %f becomes "*float*". */
+void split_fixed(double v, unsigned int dec, int *ip_out, unsigned int *fp_out, bool *neg_out)
+{
+	int64_t scale = 1;
+
+	for (unsigned int i = 0; i < dec; i++) {
+		scale *= 10;
+	}
+
+	double rounded = v * (double)scale + (v >= 0.0 ? 0.5 : -0.5);
+	int64_t scaled = (int64_t)rounded;
+
+	*neg_out = scaled < 0;
+	if (*neg_out) {
+		scaled = -scaled;
+	}
+
+	*ip_out = (int)(scaled / scale);
+	*fp_out = (unsigned int)(scaled % scale);
+}
+
+/* Publish GPS data over MQTT */
 void publish_gps_data(struct gps_data *gps)
 {
+	int err;
 	char gps_json[128];
 	int len;
+	int lat_i, lon_i;
+	unsigned int lat_f, lon_f;
+	bool lat_neg, lon_neg;
+	int acc10;
 
-	len = snprintk(gps_json, sizeof(gps_json), "{\"lat\":%.6f,\"lon\":%.6f,\"accuracy\":%.1f}",
-		       (double)gps->latitude, (double)gps->longitude, (double)gps->accuracy);
-	if (len < 0 || len >= (int)sizeof(gps_json)) {
+	split_fixed(gps->latitude, 6, &lat_i, &lat_f, &lat_neg);
+	split_fixed(gps->longitude, 6, &lon_i, &lon_f, &lon_neg);
+
+	acc10 = (int)((double)gps->accuracy * 10.0 + 0.5);
+	if (acc10 < 0) {
+		acc10 = 0;
+	}
+
+	len = snprintk(gps_json, sizeof(gps_json),
+		       "{\"lat\":%s%d.%06u,\"lon\":%s%d.%06u,\"accuracy\":%d.%d}",
+		       lat_neg ? "-" : "", lat_i, lat_f, lon_neg ? "-" : "", lon_i, lon_f,
+		       acc10 / 10, acc10 % 10);
+	if (len < 0 || len >= sizeof(gps_json)) {
 		LOG_ERR("GPS JSON buffer too small");
 		return;
 	}
 
-	int err = mqtt_client_publish_str(gps_pub_topic, gps_json);
+	err = mqtt_client_publish_str(gps_pub_topic, gps_json);
 	if (err) {
 		LOG_ERR("Failed to publish GPS data, err: %d", err);
 		return;

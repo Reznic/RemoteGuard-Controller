@@ -17,7 +17,7 @@ int client_id_get(char *const buffer, size_t buffer_size)
 		if ((ret < 0) || (ret >= buffer_size)) {
 			return -EMSGSIZE;
 		}
-	} else if (IS_ENABLED(CONFIG_BOARD_NATIVE_SIM)) {
+	} else if (IS_ENABLED(CONFIG_APP_CLIENT_ID_FALLBACK_RANDOM)) {
 		ret = snprintk(buffer, buffer_size, "%d", sys_rand32_get());
 		if ((ret < 0) || (ret >= buffer_size)) {
 			return -EMSGSIZE;

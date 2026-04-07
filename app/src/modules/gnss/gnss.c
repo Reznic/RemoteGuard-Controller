@@ -8,9 +8,9 @@
 #include <zephyr/logging/log.h>
 #include <zephyr/zbus/zbus.h>
 #include <nrf_modem_gnss.h>
-#include <modem/lte_lc.h>
 #include <string.h>
 
+#include "gnss_modem_api.h"
 #include "message_channel.h"
 
 /* Register log module */
@@ -35,7 +35,7 @@ static void gnss_event_handler(int event)
 
 	switch (event) {
 	case NRF_MODEM_GNSS_EVT_PVT:
-		retval = nrf_modem_gnss_read(&last_pvt, sizeof(last_pvt), NRF_MODEM_GNSS_DATA_PVT);
+		retval = gnss_modem_read_pvt(&last_pvt);
 		if (retval == 0) {
 			k_sem_give(&pvt_data_sem);
 		} else {
@@ -73,7 +73,7 @@ static int gnss_init(void)
 	}
 
 	/* Enable GNSS functional mode */
-	err = lte_lc_func_mode_set(LTE_LC_FUNC_MODE_ACTIVATE_GNSS);
+	err = gnss_modem_lte_activate_gnss();
 	if (err) {
 		LOG_ERR("Failed to activate GNSS functional mode: %d", err);
 		publish_gnss_error(GNSS_ERROR_ACTIVATION_FAILED);
@@ -81,7 +81,7 @@ static int gnss_init(void)
 	}
 
 	/* Set GNSS event handler */
-	err = nrf_modem_gnss_event_handler_set(gnss_event_handler);
+	err = gnss_modem_event_handler_set(gnss_event_handler);
 	if (err) {
 		LOG_ERR("Failed to set GNSS event handler: %d", err);
 		publish_gnss_error(GNSS_ERROR_EVENT_HANDLER_FAILED);
@@ -90,7 +90,7 @@ static int gnss_init(void)
 
 	/* Set use case */
 	uint8_t use_case = NRF_MODEM_GNSS_USE_CASE_MULTIPLE_HOT_START;
-	err = nrf_modem_gnss_use_case_set(use_case);
+	err = gnss_modem_use_case_set(use_case);
 	if (err) {
 		LOG_WRN("Failed to set GNSS use case: %d", err);
 		/* Non-critical, don't publish error */
@@ -98,7 +98,7 @@ static int gnss_init(void)
 
 	/* Set power saving mode for low power */
 	uint8_t power_mode = NRF_MODEM_GNSS_PSM_DUTY_CYCLING_POWER;
-	err = nrf_modem_gnss_power_mode_set(power_mode);
+	err = gnss_modem_power_mode_set(power_mode);
 	if (err) {
 		LOG_ERR("Failed to set GNSS power saving mode: %d", err);
 		publish_gnss_error(GNSS_ERROR_CONFIG_FAILED);
@@ -129,14 +129,14 @@ static int gnss_start_single_fix(void)
 	}
 
 	/* Configure for single fix mode */
-	err = nrf_modem_gnss_fix_retry_set(CONFIG_MQTT_SAMPLE_GNSS_FIX_TIMEOUT);
+	err = gnss_modem_fix_retry_set(CONFIG_MQTT_SAMPLE_GNSS_FIX_TIMEOUT);
 	if (err) {
 		LOG_ERR("Failed to set GNSS fix retry: %d", err);
 		publish_gnss_error(GNSS_ERROR_CONFIG_FAILED);
 		return err;
 	}
 
-	err = nrf_modem_gnss_fix_interval_set(0);
+	err = gnss_modem_fix_interval_set(0);
 	if (err) {
 		LOG_ERR("Failed to set GNSS fix interval: %d", err);
 		publish_gnss_error(GNSS_ERROR_CONFIG_FAILED);
@@ -144,7 +144,7 @@ static int gnss_start_single_fix(void)
 	}
 
 	/* Start GNSS */
-	err = nrf_modem_gnss_start();
+	err = gnss_modem_start();
 	if (err) {
 		LOG_ERR("Failed to start GNSS: %d", err);
 		publish_gnss_error(GNSS_ERROR_START_FAILED);
@@ -166,7 +166,7 @@ static int gnss_stop(void)
 		return 0;
 	}
 
-	err = nrf_modem_gnss_stop();
+	err = gnss_modem_stop();
 	if (err) {
 		LOG_ERR("Failed to stop GNSS: %d", err);
 		publish_gnss_error(GNSS_ERROR_STOP_FAILED);
