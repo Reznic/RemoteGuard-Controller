@@ -12,7 +12,7 @@
 
 #include "message_channel.h"
 
-/* Strong definition may be provided by tests/utils/network_native_sim_fixup.c */
+/* Strong definition may be provided by tests/mocks/network_native_sim_fixup.c */
 __weak void network_after_connect_hook(void)
 {
 }
@@ -100,7 +100,7 @@ static void network_task(void)
 		return;
 	}
 
-	/* Native_sim: see tests/utils/network_native_sim_fixup.c */
+	/* Native_sim: see tests/mocks/network_native_sim_fixup.c */
 	network_after_connect_hook();
 }
 

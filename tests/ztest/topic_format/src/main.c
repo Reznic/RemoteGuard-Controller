@@ -1,8 +1,4 @@
 /*
- * Copyright (c) Nordic Semiconductor ASA
- *
- * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
- *
  * ztest: MQTT topic string layout (same pattern as transport topics_prefix).
  */
 

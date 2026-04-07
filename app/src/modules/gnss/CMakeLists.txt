@@ -17,7 +17,7 @@ if(CONFIG_MQTT_SAMPLE_GNSS)
 
   target_sources(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/gnss.c)
   if(CONFIG_BOARD_NATIVE_SIM)
-    target_sources(app PRIVATE ${CMAKE_SOURCE_DIR}/../tests/utils/gnss_modem_mock.c)
+    target_sources(app PRIVATE ${CMAKE_SOURCE_DIR}/../tests/mocks/gnss_modem_mock.c)
   else()
     target_sources(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/gnss_modem_api_nrf.c)
   endif()

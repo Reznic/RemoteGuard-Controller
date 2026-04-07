@@ -9,7 +9,7 @@ menuconfig MQTT_SAMPLE_GNSS
 	default y
 	help
 	  Enable the GNSS module for GPS location tracking (nRF modem), or native_sim stubs
-	  (tests/utils/gnss_modem_mock.c) for integration tests.
+	  (tests/mocks/gnss_modem_mock.c) for integration tests.
 
 if MQTT_SAMPLE_GNSS
 

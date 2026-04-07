@@ -1,20 +1,18 @@
-"""Test the get gps location command""" 
+"""E2E Tests"""
 from __future__ import annotations
-
 import json
-
 import pytest
 
 
 @pytest.mark.mqtt
 @pytest.mark.e2e
 @pytest.mark.usefixtures("simulator_runner")
-def test_mqtt_get_location_returns_mock_gps_json(
+def test_get_gps_location(
     broker_client,
     mqtt_gps_cmd_topic: str,
     mqtt_gps_data_topic: str
 ) -> None:
-    # Must match STUB_* in tests/utils/gnss_modem_mock.c
+    # Must match STUB_* in tests/mocks/gnss_modem_mock.c
     expected_lat = 59.913900
     expected_lon = 10.752200
     expected_acc = 5.0
@@ -22,7 +20,7 @@ def test_mqtt_get_location_returns_mock_gps_json(
     broker_client.drain()
     broker_client.subscribe(mqtt_gps_data_topic, qos=1)
     broker_client.publish(mqtt_gps_cmd_topic, b"get", qos=1)
-    
+
     try:
         gps_data_msg = broker_client.wait_for_message_on_topic(mqtt_gps_data_topic, timeout=45.0)
     except TimeoutError as e:
@@ -35,3 +33,14 @@ def test_mqtt_get_location_returns_mock_gps_json(
     assert coords["lat"] == pytest.approx(expected_lat, rel=1e-5, abs=1e-5), f"Expected gps latitude: {expected_lat}, got {coords['lat']}"
     assert coords["lon"] == pytest.approx(expected_lon, rel=1e-5, abs=1e-5), f"Expected gps longitude: {expected_lon}, got {coords['lon']}"
     assert coords["accuracy"] == pytest.approx(expected_acc, rel=1e-3, abs=1e-3), f"Expected gps accuracy: {expected_acc}, got {coords['accuracy']}"
+
+
+@pytest.mark.e2e
+def test_take_photo(
+    broker_client,
+    simulator_runner,
+    mqtt_transport_subscribe_topic: str,
+) -> None:
+    broker_client.drain()
+    broker_client.publish(mqtt_transport_subscribe_topic, "take_photo", qos=1)
+    simulator_runner.wait_for_substring("Published take_photo command to camera", timeout=30.0)

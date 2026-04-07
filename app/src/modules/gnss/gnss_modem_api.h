@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  *
  * Thin port around LTE + nrf_modem_gnss calls used by gnss.c.
- * Production boards link gnss_modem_api_nrf.c; native_sim links tests/utils/gnss_modem_mock.c.
+ * Production boards link gnss_modem_api_nrf.c; native_sim links tests/mocks/gnss_modem_mock.c.
  * Unit tests can mock these symbols (e.g. fff) without pulling in the modem.
  */
 
