@@ -49,6 +49,10 @@ char client_id[CONFIG_MQTT_SAMPLE_TRANSPORT_CLIENT_ID_BUFFER_SIZE];
 static uint8_t sub_topic[sizeof(client_id) + sizeof(CONFIG_MQTT_SAMPLE_TRANSPORT_SUBSCRIBE_TOPIC)];
 static uint8_t get_gps_topic[sizeof(client_id) + sizeof(CONFIG_MQTT_GPS_CMD_TOPIC)];
 uint8_t gps_pub_topic[sizeof(client_id) + sizeof(CONFIG_MQTT_GPS_DATA_TOPIC)];
+uint8_t camera_photo_meta_topic[sizeof(client_id) + sizeof(CONFIG_MQTT_CAMERA_PHOTO_META_TOPIC)];
+uint8_t camera_photo_chunk_base[sizeof(client_id) + sizeof(CONFIG_MQTT_CAMERA_PHOTO_CHUNK_TOPIC)];
+uint8_t gps_error_topic[sizeof(client_id) + sizeof(CONFIG_MQTT_GPS_ERROR_TOPIC)];
+uint8_t camera_error_topic[sizeof(client_id) + sizeof(CONFIG_MQTT_CAMERA_ERROR_TOPIC)];
 #if defined(CONFIG_MQTT_CLIENT_LAST_WILL)
 static uint8_t lwt_topic[sizeof(client_id) + sizeof(CONFIG_MQTT_CLIENT_LAST_WILL_TOPIC) + 2];
 #endif
@@ -274,6 +278,34 @@ static int topics_prefix(void)
 		return -EMSGSIZE;
 	}
 
+	len = snprintk(camera_photo_meta_topic, sizeof(camera_photo_meta_topic), "%s/%s", client_id,
+		       CONFIG_MQTT_CAMERA_PHOTO_META_TOPIC);
+	if ((len < 0) || (len >= sizeof(camera_photo_meta_topic))) {
+		LOG_ERR("Camera photo meta topic buffer too small");
+		return -EMSGSIZE;
+	}
+
+	len = snprintk(camera_photo_chunk_base, sizeof(camera_photo_chunk_base), "%s/%s", client_id,
+		       CONFIG_MQTT_CAMERA_PHOTO_CHUNK_TOPIC);
+	if ((len < 0) || (len >= sizeof(camera_photo_chunk_base))) {
+		LOG_ERR("Camera photo chunk topic buffer too small");
+		return -EMSGSIZE;
+	}
+
+	len = snprintk(gps_error_topic, sizeof(gps_error_topic), "%s/%s", client_id,
+		       CONFIG_MQTT_GPS_ERROR_TOPIC);
+	if ((len < 0) || (len >= sizeof(gps_error_topic))) {
+		LOG_ERR("GPS error topic buffer too small");
+		return -EMSGSIZE;
+	}
+
+	len = snprintk(camera_error_topic, sizeof(camera_error_topic), "%s/%s", client_id,
+		       CONFIG_MQTT_CAMERA_ERROR_TOPIC);
+	if ((len < 0) || (len >= sizeof(camera_error_topic))) {
+		LOG_ERR("Camera error topic buffer too small");
+		return -EMSGSIZE;
+	}
+
 #if defined(CONFIG_MQTT_CLIENT_LAST_WILL)
 	len = snprintk(lwt_topic, sizeof(lwt_topic), "%s/%s", client_id,
 		       CONFIG_MQTT_CLIENT_LAST_WILL_TOPIC);
@@ -435,7 +467,8 @@ static void mqtt_connected_run(void *o)
 		(void)mqtt_client_disconnect();
 		return;
 	}
-	mqtt_client_publish_str(pub_topic, ctx->payload.string);
+
+	ARG_UNUSED(ctx);
 }
 
 /* Function executed when the module exits the connected state. */
@@ -459,7 +492,7 @@ static void transport_task(void)
 	int err;
 	const struct zbus_channel *chan;
 	enum network_status status;
-	struct mqtt_helper_cfg cfg = {
+	struct mqtt_client_cfg cfg = {
 		.cb = {
 			.on_connack = on_mqtt_connack,
 			.on_disconnect = on_mqtt_disconnect,

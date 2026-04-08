@@ -16,7 +16,7 @@
 
 #include "publish_msg_factory.h"
 
-/* client_id, pub_topic, gps_pub_topic are defined in transport.c */
+/* client_id, gps_pub_topic, and publish topics are defined in transport.c */
 
 LOG_MODULE_REGISTER(publish_msg_factory, CONFIG_APP_LOG_LEVEL);
 
@@ -24,20 +24,13 @@ LOG_MODULE_REGISTER(publish_msg_factory, CONFIG_APP_LOG_LEVEL);
 void publish_camera_chunk(struct camera_chunk *chunk)
 {
 	int err;
-	static char photo_meta_topic[sizeof(client_id) + 32];
-	static char photo_chunk_topic[sizeof(client_id) + 64];
+	int len;
+	static char photo_chunk_topic[sizeof(camera_photo_chunk_base) + 16];
 	static bool meta_published = false;
 	static uint32_t last_sequence = UINT32_MAX;
 
 	/* Publish meta on first chunk */
 	if (chunk->sequence == 0) {
-		int len = snprintk(photo_meta_topic, sizeof(photo_meta_topic),
-				   "%s/camera/photo/meta", client_id);
-		if (len < 0 || len >= sizeof(photo_meta_topic)) {
-			LOG_ERR("Photo meta topic buffer too small");
-			return;
-		}
-
 		/* Meta payload: JSON with id, chunks, size */
 		char meta_buf[128];
 		len = snprintk(meta_buf, sizeof(meta_buf),
@@ -48,7 +41,7 @@ void publish_camera_chunk(struct camera_chunk *chunk)
 			return;
 		}
 
-		err = mqtt_client_publish_str(photo_meta_topic, meta_buf);
+		err = mqtt_client_publish_str((char *)camera_photo_meta_topic, meta_buf);
 		if (err) {
 			LOG_ERR("Failed to publish photo meta, err: %d", err);
 			return;
@@ -59,8 +52,8 @@ void publish_camera_chunk(struct camera_chunk *chunk)
 	}
 
 	/* Publish chunk */
-	int len = snprintk(photo_chunk_topic, sizeof(photo_chunk_topic),
-			   "%s/camera/photo/chunk/%u", client_id, chunk->sequence);
+	len = snprintk(photo_chunk_topic, sizeof(photo_chunk_topic), "%s/%u",
+			   (char *)camera_photo_chunk_base, chunk->sequence);
 	if (len < 0 || len >= sizeof(photo_chunk_topic)) {
 		LOG_ERR("Photo chunk topic buffer too small");
 		return;
@@ -181,7 +174,7 @@ void publish_gps_error(enum gnss_error_type error)
 		break;
 	}
 
-	int err = mqtt_client_publish_str("/device/gps/error", error_str);
+	int err = mqtt_client_publish_str((char *)gps_error_topic, error_str);
 	if (err) {
 		LOG_ERR("Failed to publish GPS error, err: %d", err);
 		return;
@@ -209,7 +202,7 @@ void publish_camera_error(enum camera_error_type error)
 		break;
 	}
 
-	int err = mqtt_client_publish_str("/camera/error", error_str);
+	int err = mqtt_client_publish_str((char *)camera_error_topic, error_str);
 	if (err) {
 		LOG_ERR("Failed to publish camera error, err: %d", err);
 		return;

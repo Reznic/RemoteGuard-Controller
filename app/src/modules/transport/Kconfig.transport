@@ -70,6 +70,22 @@ config MQTT_GPS_DATA_TOPIC
 	string "MQTT gps data publish topic"
 	default "device/gps"
 
+config MQTT_CAMERA_PHOTO_META_TOPIC
+	string "MQTT camera photo metadata publish topic (suffix after client id)"
+	default "camera/photo/meta"
+
+config MQTT_CAMERA_PHOTO_CHUNK_TOPIC
+	string "MQTT camera photo chunk publish topic prefix (suffix after client id; sequence appended)"
+	default "camera/photo/chunk"
+
+config MQTT_GPS_ERROR_TOPIC
+	string "MQTT GNSS error publish topic (suffix after client id)"
+	default "device/gps/error"
+
+config MQTT_CAMERA_ERROR_TOPIC
+	string "MQTT camera error publish topic (suffix after client id)"
+	default "camera/error"
+
 module = MQTT_SAMPLE_TRANSPORT
 module-str = Transport
 source "subsys/logging/Kconfig.template.log_config"

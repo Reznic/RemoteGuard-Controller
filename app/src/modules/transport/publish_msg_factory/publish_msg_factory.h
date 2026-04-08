@@ -12,10 +12,16 @@
 #include "message_channel.h"
 
 extern char client_id[CONFIG_MQTT_SAMPLE_TRANSPORT_CLIENT_ID_BUFFER_SIZE];
-extern uint8_t pub_topic[CONFIG_MQTT_SAMPLE_TRANSPORT_CLIENT_ID_BUFFER_SIZE +
-			sizeof(CONFIG_MQTT_SAMPLE_TRANSPORT_PUBLISH_TOPIC)];
 extern uint8_t gps_pub_topic[CONFIG_MQTT_SAMPLE_TRANSPORT_CLIENT_ID_BUFFER_SIZE +
 			      sizeof(CONFIG_MQTT_GPS_DATA_TOPIC)];
+extern uint8_t camera_photo_meta_topic[CONFIG_MQTT_SAMPLE_TRANSPORT_CLIENT_ID_BUFFER_SIZE +
+				       sizeof(CONFIG_MQTT_CAMERA_PHOTO_META_TOPIC)];
+extern uint8_t camera_photo_chunk_base[CONFIG_MQTT_SAMPLE_TRANSPORT_CLIENT_ID_BUFFER_SIZE +
+				       sizeof(CONFIG_MQTT_CAMERA_PHOTO_CHUNK_TOPIC)];
+extern uint8_t gps_error_topic[CONFIG_MQTT_SAMPLE_TRANSPORT_CLIENT_ID_BUFFER_SIZE +
+			       sizeof(CONFIG_MQTT_GPS_ERROR_TOPIC)];
+extern uint8_t camera_error_topic[CONFIG_MQTT_SAMPLE_TRANSPORT_CLIENT_ID_BUFFER_SIZE +
+				sizeof(CONFIG_MQTT_CAMERA_ERROR_TOPIC)];
 
 void publish_camera_chunk(struct camera_chunk *chunk);
 void publish_gps_data(struct gps_data *gps);
