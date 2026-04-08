@@ -16,10 +16,9 @@
 
 #include "publish_msg_factory.h"
 
-/* client_id, gps_pub_topic, and publish topics are defined in transport.c */
-
 LOG_MODULE_REGISTER(publish_msg_factory, CONFIG_APP_LOG_LEVEL);
 
+#if IS_ENABLED(CONFIG_MQTT_SAMPLE_CAMERA)
 
 void publish_camera_chunk(struct camera_chunk *chunk)
 {
@@ -53,7 +52,7 @@ void publish_camera_chunk(struct camera_chunk *chunk)
 
 	/* Publish chunk */
 	len = snprintk(photo_chunk_topic, sizeof(photo_chunk_topic), "%s/%u",
-			   (char *)camera_photo_chunk_base, chunk->sequence);
+		       (char *)camera_photo_chunk_base, chunk->sequence);
 	if (len < 0 || len >= sizeof(photo_chunk_topic)) {
 		LOG_ERR("Photo chunk topic buffer too small");
 		return;
@@ -76,8 +75,40 @@ void publish_camera_chunk(struct camera_chunk *chunk)
 	}
 }
 
+void publish_camera_error(enum camera_error_type error)
+{
+	const char *error_str;
+
+	switch (error) {
+	case CAMERA_ERROR_NRF_INTERNAL:
+		error_str = "nrf_internal_error";
+		break;
+	case CAMERA_ERROR_ESP32_NOT_RESPONDING:
+		error_str = "cam_module_not_responding";
+		break;
+	case CAMERA_ERROR_ESP32_CAMERA_ACCESS_FAILED:
+		error_str = "camera_access_failed";
+		break;
+	default:
+		error_str = "unknown";
+		break;
+	}
+
+	int err = mqtt_client_publish_str((char *)camera_error_topic, error_str);
+	if (err) {
+		LOG_ERR("Failed to publish camera error, err: %d", err);
+		return;
+	}
+
+	LOG_INF("Published camera error: %s", error_str);
+}
+
+#endif /* CONFIG_MQTT_SAMPLE_CAMERA */
+
+#if IS_ENABLED(CONFIG_MQTT_SAMPLE_GNSS)
+
 /* Picolibc maps snprintk → snprintf; without PICOLIBC_IO_FLOAT, %f becomes "*float*". */
-void split_fixed(double v, unsigned int dec, int *ip_out, unsigned int *fp_out, bool *neg_out)
+static void split_fixed(double v, unsigned int dec, int *ip_out, unsigned int *fp_out, bool *neg_out)
 {
 	int64_t scale = 1;
 
@@ -97,7 +128,6 @@ void split_fixed(double v, unsigned int dec, int *ip_out, unsigned int *fp_out, 
 	*fp_out = (unsigned int)(scaled % scale);
 }
 
-/* Publish GPS data over MQTT */
 void publish_gps_data(struct gps_data *gps)
 {
 	int err;
@@ -125,7 +155,7 @@ void publish_gps_data(struct gps_data *gps)
 		return;
 	}
 
-	err = mqtt_client_publish_str(gps_pub_topic, gps_json);
+	err = mqtt_client_publish_str((char *)gps_pub_topic, gps_json);
 	if (err) {
 		LOG_ERR("Failed to publish GPS data, err: %d", err);
 		return;
@@ -183,30 +213,4 @@ void publish_gps_error(enum gnss_error_type error)
 	LOG_INF("Published GPS error: %s", error_str);
 }
 
-void publish_camera_error(enum camera_error_type error)
-{
-	const char *error_str;
-
-	switch (error) {
-	case CAMERA_ERROR_NRF_INTERNAL:
-		error_str = "nrf_internal_error";
-		break;
-	case CAMERA_ERROR_ESP32_NOT_RESPONDING:
-		error_str = "cam_module_not_responding";
-		break;
-	case CAMERA_ERROR_ESP32_CAMERA_ACCESS_FAILED:
-		error_str = "camera_access_failed";
-		break;
-	default:
-		error_str = "unknown";
-		break;
-	}
-
-	int err = mqtt_client_publish_str((char *)camera_error_topic, error_str);
-	if (err) {
-		LOG_ERR("Failed to publish camera error, err: %d", err);
-		return;
-	}
-
-	LOG_INF("Published camera error: %s", error_str);
-}
+#endif /* CONFIG_MQTT_SAMPLE_GNSS */

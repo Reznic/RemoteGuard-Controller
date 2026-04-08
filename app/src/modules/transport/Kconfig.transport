@@ -65,26 +65,32 @@ config MQTT_SAMPLE_TRANSPORT_SUBSCRIBE_TOPIC
 config MQTT_GPS_CMD_TOPIC
 	string "MQTT gps commands subscribe topic"
 	default "device/get_gps"
+	depends on MQTT_SAMPLE_GNSS
 
 config MQTT_GPS_DATA_TOPIC
 	string "MQTT gps data publish topic"
 	default "device/gps"
-
-config MQTT_CAMERA_PHOTO_META_TOPIC
-	string "MQTT camera photo metadata publish topic (suffix after client id)"
-	default "camera/photo/meta"
-
-config MQTT_CAMERA_PHOTO_CHUNK_TOPIC
-	string "MQTT camera photo chunk publish topic prefix (suffix after client id; sequence appended)"
-	default "camera/photo/chunk"
+	depends on MQTT_SAMPLE_GNSS
 
 config MQTT_GPS_ERROR_TOPIC
 	string "MQTT GNSS error publish topic (suffix after client id)"
 	default "device/gps/error"
+	depends on MQTT_SAMPLE_GNSS
+
+config MQTT_CAMERA_PHOTO_META_TOPIC
+	string "MQTT camera photo metadata publish topic (suffix after client id)"
+	default "camera/photo/meta"
+	depends on MQTT_SAMPLE_CAMERA
+
+config MQTT_CAMERA_PHOTO_CHUNK_TOPIC
+	string "MQTT camera photo chunk publish topic prefix (suffix after client id; sequence appended)"
+	default "camera/photo/chunk"
+	depends on MQTT_SAMPLE_CAMERA
 
 config MQTT_CAMERA_ERROR_TOPIC
 	string "MQTT camera error publish topic (suffix after client id)"
 	default "camera/error"
+	depends on MQTT_SAMPLE_CAMERA
 
 module = MQTT_SAMPLE_TRANSPORT
 module-str = Transport

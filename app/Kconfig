@@ -21,10 +21,10 @@ config APP_LOG_LEVEL
 
 rsource "src/modules/network/Kconfig.network"
 rsource "src/modules/mqtt_client/Kconfig.mqtt_client"
-rsource "src/modules/transport/Kconfig.transport"
 rsource "src/modules/error/Kconfig.error"
 rsource "src/modules/camera/Kconfig.camera"
 rsource "src/modules/gnss/Kconfig.gnss"
+rsource "src/modules/transport/Kconfig.transport"
 rsource "drivers/esp32cam/Kconfig"
 
 endmenu

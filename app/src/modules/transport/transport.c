@@ -23,7 +23,9 @@ ZBUS_SUBSCRIBER_DEFINE(transport, CONFIG_MQTT_SAMPLE_TRANSPORT_MESSAGE_QUEUE_SIZ
 
 /* ID for subscribe topic - Used to verify that a subscription succeeded in on_mqtt_suback(). */
 #define SUBSCRIBE_TOPIC_ID 2469
+#if IS_ENABLED(CONFIG_MQTT_SAMPLE_GNSS)
 #define GET_GPS_TOPIC_ID 2470
+#endif
 
 /* Forward declarations */
 static const struct smf_state state[];
@@ -47,12 +49,16 @@ enum module_state { MQTT_CONNECTED, MQTT_DISCONNECTED };
 char client_id[CONFIG_MQTT_SAMPLE_TRANSPORT_CLIENT_ID_BUFFER_SIZE];
 
 static uint8_t sub_topic[sizeof(client_id) + sizeof(CONFIG_MQTT_SAMPLE_TRANSPORT_SUBSCRIBE_TOPIC)];
+#if IS_ENABLED(CONFIG_MQTT_SAMPLE_GNSS)
 static uint8_t get_gps_topic[sizeof(client_id) + sizeof(CONFIG_MQTT_GPS_CMD_TOPIC)];
 uint8_t gps_pub_topic[sizeof(client_id) + sizeof(CONFIG_MQTT_GPS_DATA_TOPIC)];
+uint8_t gps_error_topic[sizeof(client_id) + sizeof(CONFIG_MQTT_GPS_ERROR_TOPIC)];
+#endif
+#if IS_ENABLED(CONFIG_MQTT_SAMPLE_CAMERA)
 uint8_t camera_photo_meta_topic[sizeof(client_id) + sizeof(CONFIG_MQTT_CAMERA_PHOTO_META_TOPIC)];
 uint8_t camera_photo_chunk_base[sizeof(client_id) + sizeof(CONFIG_MQTT_CAMERA_PHOTO_CHUNK_TOPIC)];
-uint8_t gps_error_topic[sizeof(client_id) + sizeof(CONFIG_MQTT_GPS_ERROR_TOPIC)];
 uint8_t camera_error_topic[sizeof(client_id) + sizeof(CONFIG_MQTT_CAMERA_ERROR_TOPIC)];
+#endif
 #if defined(CONFIG_MQTT_CLIENT_LAST_WILL)
 static uint8_t lwt_topic[sizeof(client_id) + sizeof(CONFIG_MQTT_CLIENT_LAST_WILL_TOPIC) + 2];
 #endif
@@ -159,9 +165,10 @@ static bool topic_matches(const struct mqtt_client_buf *topic, const char *str)
 
 static void on_mqtt_publish(struct mqtt_client_buf topic, struct mqtt_client_buf payload)
 {
-	enum camera_cmd cmd;
-	enum gnss_cmd gnss_cmd;
 	int err;
+
+#if IS_ENABLED(CONFIG_MQTT_SAMPLE_GNSS)
+	enum gnss_cmd gnss_cmd;
 
 	/* Check for GPS location request */
 	if (topic_matches(&topic, (char *)get_gps_topic)) {
@@ -174,6 +181,10 @@ static void on_mqtt_publish(struct mqtt_client_buf topic, struct mqtt_client_buf
 		}
 		return;
 	}
+#endif
+
+#if IS_ENABLED(CONFIG_MQTT_SAMPLE_CAMERA)
+	enum camera_cmd cmd;
 
 	/* Check for camera commands */
 	if (payload_matches(&payload, "take_photo")) {
@@ -216,7 +227,9 @@ static void on_mqtt_publish(struct mqtt_client_buf topic, struct mqtt_client_buf
 		} else {
 			LOG_INF("Published camera_off command to camera");
 		}
-	} else if (payload_matches(&payload, "activate motor")) {
+	} else
+#endif
+	if (payload_matches(&payload, "activate motor")) {
 		LOG_INF("Received payload: %.*s on topic: %.*s", payload.size,
 							 payload.ptr,
 							 topic.size,
@@ -244,9 +257,11 @@ static void on_mqtt_suback(uint16_t message_id, int result)
 	case SUBSCRIBE_TOPIC_ID:
 		LOG_INF("MQTT Subscribed to payload topic");
 		break;
+#if IS_ENABLED(CONFIG_MQTT_SAMPLE_GNSS)
 	case GET_GPS_TOPIC_ID:
 		LOG_INF("MQTT Subscribed to GPS topic");
 		break;
+#endif
 	default:
 		LOG_WRN("MQTT Subscribed to unknown topic id: %d", message_id);
 	}
@@ -266,6 +281,7 @@ static int topics_prefix(void)
 		return -EMSGSIZE;
 	}
 
+#if IS_ENABLED(CONFIG_MQTT_SAMPLE_GNSS)
 	len = snprintk(get_gps_topic, sizeof(get_gps_topic), "%s/%s", client_id, CONFIG_MQTT_GPS_CMD_TOPIC);
 	if ((len < 0) || (len >= sizeof(get_gps_topic))) {
 		LOG_ERR("Get GPS topic buffer too small");
@@ -278,6 +294,15 @@ static int topics_prefix(void)
 		return -EMSGSIZE;
 	}
 
+	len = snprintk(gps_error_topic, sizeof(gps_error_topic), "%s/%s", client_id,
+		       CONFIG_MQTT_GPS_ERROR_TOPIC);
+	if ((len < 0) || (len >= sizeof(gps_error_topic))) {
+		LOG_ERR("GPS error topic buffer too small");
+		return -EMSGSIZE;
+	}
+#endif
+
+#if IS_ENABLED(CONFIG_MQTT_SAMPLE_CAMERA)
 	len = snprintk(camera_photo_meta_topic, sizeof(camera_photo_meta_topic), "%s/%s", client_id,
 		       CONFIG_MQTT_CAMERA_PHOTO_META_TOPIC);
 	if ((len < 0) || (len >= sizeof(camera_photo_meta_topic))) {
@@ -292,19 +317,13 @@ static int topics_prefix(void)
 		return -EMSGSIZE;
 	}
 
-	len = snprintk(gps_error_topic, sizeof(gps_error_topic), "%s/%s", client_id,
-		       CONFIG_MQTT_GPS_ERROR_TOPIC);
-	if ((len < 0) || (len >= sizeof(gps_error_topic))) {
-		LOG_ERR("GPS error topic buffer too small");
-		return -EMSGSIZE;
-	}
-
 	len = snprintk(camera_error_topic, sizeof(camera_error_topic), "%s/%s", client_id,
 		       CONFIG_MQTT_CAMERA_ERROR_TOPIC);
 	if ((len < 0) || (len >= sizeof(camera_error_topic))) {
 		LOG_ERR("Camera error topic buffer too small");
 		return -EMSGSIZE;
 	}
+#endif
 
 #if defined(CONFIG_MQTT_CLIENT_LAST_WILL)
 	len = snprintk(lwt_topic, sizeof(lwt_topic), "%s/%s", client_id,
@@ -342,6 +361,7 @@ static void subscribe(void)
 		return;
 	}
 
+#if IS_ENABLED(CONFIG_MQTT_SAMPLE_GNSS)
 	/* Subscribe to GPS topic */
 	struct mqtt_topic gps_topics[] = {
 		{
@@ -361,6 +381,7 @@ static void subscribe(void)
 		LOG_ERR("Failed to subscribe to GPS topic, error: %d", err);
 		return;
 	}
+#endif
 }
 
 /* Connect work - Used to establish a connection to the MQTT broker and schedule reconnection
@@ -537,7 +558,8 @@ static void transport_task(void)
 			s_obj.network_connection_status = status;
 		}
 
-		else if (&CAMERA_CHUNK_CHAN == chan) {
+#if IS_ENABLED(CONFIG_MQTT_SAMPLE_CAMERA)
+		if (&CAMERA_CHUNK_CHAN == chan) {
 			struct camera_chunk chunk;
 
 			err = zbus_chan_read(&CAMERA_CHUNK_CHAN, &chunk, K_SECONDS(1));
@@ -547,15 +569,13 @@ static void transport_task(void)
 				continue;
 			}
 
-			/* Only publish if MQTT is connected */
-			if (s_obj.network_connection_status == NETWORK_CONNECTED ) {
-			    // && smf_get_current_leaf_state(SMF_CTX(&s_obj)) == &state[MQTT_CONNECTED]) {
+			if (s_obj.network_connection_status == NETWORK_CONNECTED) {
 				publish_camera_chunk(&chunk);
 			}
 			continue;
 		}
 
-		else if (&CAMERA_ERROR_CHAN == chan) {
+		if (&CAMERA_ERROR_CHAN == chan) {
 			enum camera_error_type error;
 
 			err = zbus_chan_read(&CAMERA_ERROR_CHAN, &error, K_SECONDS(1));
@@ -565,15 +585,14 @@ static void transport_task(void)
 				continue;
 			}
 
-			/* Only publish if MQTT is connected */
-			if (s_obj.network_connection_status == NETWORK_CONNECTED ) {
-			    // && smf_get_current_leaf_state(SMF_CTX(&s_obj)) == &state[MQTT_CONNECTED]) {
+			if (s_obj.network_connection_status == NETWORK_CONNECTED) {
 				publish_camera_error(error);
 			}
 			continue;
 		}
-
-		else if (&GPS_DATA_CHAN == chan) {
+#endif
+#if IS_ENABLED(CONFIG_MQTT_SAMPLE_GNSS)
+		if (&GPS_DATA_CHAN == chan) {
 			struct gps_data gps;
 
 			err = zbus_chan_read(&GPS_DATA_CHAN, &gps, K_SECONDS(1));
@@ -583,15 +602,13 @@ static void transport_task(void)
 				continue;
 			}
 
-			/* Only publish if MQTT is connected */
-			if (s_obj.network_connection_status == NETWORK_CONNECTED ) {
-			    // && smf_get_current_leaf_state(SMF_CTX(&s_obj)) == &state[MQTT_CONNECTED]) {
+			if (s_obj.network_connection_status == NETWORK_CONNECTED) {
 				publish_gps_data(&gps);
 			}
 			continue;
 		}
 
-		else if (&GNSS_ERROR_CHAN == chan) {
+		if (&GNSS_ERROR_CHAN == chan) {
 			enum gnss_error_type error;
 
 			err = zbus_chan_read(&GNSS_ERROR_CHAN, &error, K_SECONDS(1));
@@ -601,13 +618,12 @@ static void transport_task(void)
 				continue;
 			}
 
-			/* Only publish if MQTT is connected */
-			if (s_obj.network_connection_status == NETWORK_CONNECTED ) {
-			    // && smf_get_current_leaf_state(SMF_CTX(&s_obj)) == &state[MQTT_CONNECTED]) {
+			if (s_obj.network_connection_status == NETWORK_CONNECTED) {
 				publish_gps_error(error);
 			}
 			continue;
 		}
+#endif
 
 		err = smf_run_state(SMF_CTX(&s_obj));
 		if (err) {

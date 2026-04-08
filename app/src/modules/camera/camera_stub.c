@@ -1,10 +1,7 @@
-#include <zephyr/zbus/zbus.h>
-#include "message_channel.h"
-
-#if !IS_ENABLED(CONFIG_MQTT_SAMPLE_CAMERA)
-/* Minimal zbus subscriber stub to satisfy CAMERA_CMD_CHAN observers
- * when the camera module is disabled.
+/*
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+ *
+ * Placeholder when CONFIG_MQTT_SAMPLE_CAMERA is disabled (no camera module sources).
  */
-ZBUS_SUBSCRIBER_DEFINE(camera, 1);
-#endif
 
+typedef int camera_stub_translation_unit_placeholder;
