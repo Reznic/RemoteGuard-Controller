@@ -77,6 +77,8 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
 
 from simulator_runner import SimulatorRunner
 
+import kconfig_utils
+
 from kconfig_utils import (
     find_native_sim_executable,
     full_topic,
@@ -166,20 +168,25 @@ def mqtt_gps_data_topic(kconfig: dict[str, str], integration_device_id: str) -> 
 
 
 @pytest.fixture(scope="session")
-def simulator_runner(zephyr_build_dir: Path | None) -> Generator[SimulatorRunner, None, None]:
-    """Runs native_sim until tests finish; first waits for MQTT connected log line."""
+def mqtt_lwt_topic(kconfig: dict[str, str], integration_device_id: str) -> str:
+    return kconfig_utils.mqtt_lwt_topic(integration_device_id, kconfig)
+
+
+@pytest.fixture(scope="session")
+def dev_simulator(zephyr_build_dir: Path | None) -> Generator[SimulatorRunner, None, None]:
+    """Runs zephyr device simulator on host using native_sim."""
     exe = find_native_sim_executable(zephyr_build_dir)
     if exe is None:
         pytest.fail(f"No native_sim executable under {zephyr_build_dir / 'zephyr'!s}")
 
     dut = SimulatorRunner(exe)
-    dut.start(boot_timeout=30.0)
+    
     try:
-        dut.wait_for_substring("Connected to MQTT broker", timeout=120.0)
+        dut.start(boot_timeout=30.0)
         yield dut
 
-    except TimeoutError as e:
-        pytest.fail(f"App failed to connect to mqtt broker: {e}")
+    except Exception as e:
+        pytest.fail(f"Failed to start zephyr device simulator: {e}")
 
     finally:
         dut.stop()
