@@ -24,18 +24,20 @@ def test_abrupt_disconnect_notification(
     device_keepalive = get_mqtt_keepalive_seconds(kconfig)
     timeout = float(max(45, device_keepalive * 2 + 20))
     expected_disconnect_msg = get_mqtt_lwt_will_message(kconfig).encode("utf-8")
-
-    broker_client.subscribe(mqtt_lwt_topic, qos=1)
+    
     broker_client.clear_retained(mqtt_lwt_topic)
+    broker_client.subscribe(mqtt_lwt_topic, qos=1)
     broker_client.drain()
 
     # No disconnect message should be received while the simulator is still running.
     try:
-        broker_client.wait_for_message_on_topic(mqtt_lwt_topic, timeout=5.0)
+        msg = broker_client.wait_for_message_on_topic(mqtt_lwt_topic, timeout=timeout)
     except TimeoutError:
-        pass
+        pass  # Expected: no disconnect message.
+    except Exception as e:
+        pytest.fail(f"Error waiting for device disconnect message on the LWT topic: {e}")
     else:
-        pytest.fail("Received a device disconnect message on the LWT topic before the simulator was stopped.")
+        pytest.fail(f"Received a device disconnect message on the LWT topic before the simulator was stopped.\n{msg!r}")
 
     try:
         dev_simulator.stop_abrupt()
