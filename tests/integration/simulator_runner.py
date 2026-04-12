@@ -21,7 +21,7 @@ def native_sim_log_file_path() -> Path:
     if env:
         return Path(env)
     here = Path(__file__).resolve().parent
-    return here / "artifacts" / "native_sim_stdout.log"
+    return here / "artifacts" / "zephyr_simulator_log.txt"
 
 
 class SimulatorRunner:
