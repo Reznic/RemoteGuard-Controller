@@ -63,6 +63,10 @@ class BrokerClient:
             payload = payload.encode("utf-8")
         self._client.publish(topic, payload, qos)
 
+    def clear_retained(self, topic: str, qos: int = 1) -> None:
+        """Remove a retained message on topic (MQTT 3.1.1: publish empty payload with retain)."""
+        self._client.publish(topic, b"", qos, retain=True)
+
     def wait_for_message(
         self,
         predicate: Callable[[str, bytes], bool],

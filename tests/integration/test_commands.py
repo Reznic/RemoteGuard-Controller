@@ -6,7 +6,7 @@ import pytest
 
 @pytest.mark.mqtt
 @pytest.mark.e2e
-@pytest.mark.usefixtures("simulator_runner")
+@pytest.mark.usefixtures("dev_simulator")
 def test_get_gps_location(
     broker_client,
     mqtt_gps_cmd_topic: str,
@@ -38,9 +38,9 @@ def test_get_gps_location(
 @pytest.mark.e2e
 def test_take_photo(
     broker_client,
-    simulator_runner,
+    dev_simulator,
     mqtt_transport_subscribe_topic: str,
 ) -> None:
     broker_client.drain()
     broker_client.publish(mqtt_transport_subscribe_topic, "take_photo", qos=1)
-    simulator_runner.wait_for_substring("Published take_photo command to camera", timeout=30.0)
+    dev_simulator.wait_for_substring("Published take_photo command to camera", timeout=30.0)

@@ -1,11 +1,5 @@
-#
-# Copyright (c) 2023 Nordic Semiconductor
-#
-# SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
-#
-
 menu "Transport"
-	depends on MQTT_HELPER
+	depends on MQTT_CLIENT
 	depends on HW_ID_LIBRARY
 
 config MQTT_SAMPLE_TRANSPORT_RECONNECTION_TIMEOUT_SECONDS
@@ -13,6 +7,13 @@ config MQTT_SAMPLE_TRANSPORT_RECONNECTION_TIMEOUT_SECONDS
 	default 60
 	help
 	  Time in between reconnection attempts to the MQTT broker.
+
+config MQTT_SAMPLE_TRANSPORT_RECONNECT_MAX_ATTEMPTS
+	int "Maximum failed MQTT broker connect attempts (0 = no-retry)"
+	default 3
+	range 0 255
+	help
+	  Max attempts to connect to MQTT broker server
 
 config MQTT_SAMPLE_TRANSPORT_THREAD_STACK_SIZE
 	int "Thread stack size"
@@ -64,10 +65,32 @@ config MQTT_SAMPLE_TRANSPORT_SUBSCRIBE_TOPIC
 config MQTT_GPS_CMD_TOPIC
 	string "MQTT gps commands subscribe topic"
 	default "device/get_gps"
+	depends on MQTT_SAMPLE_GNSS
 
 config MQTT_GPS_DATA_TOPIC
 	string "MQTT gps data publish topic"
 	default "device/gps"
+	depends on MQTT_SAMPLE_GNSS
+
+config MQTT_GPS_ERROR_TOPIC
+	string "MQTT GNSS error publish topic (suffix after client id)"
+	default "device/gps/error"
+	depends on MQTT_SAMPLE_GNSS
+
+config MQTT_CAMERA_PHOTO_META_TOPIC
+	string "MQTT camera photo metadata publish topic (suffix after client id)"
+	default "camera/photo/meta"
+	depends on MQTT_SAMPLE_CAMERA
+
+config MQTT_CAMERA_PHOTO_CHUNK_TOPIC
+	string "MQTT camera photo chunk publish topic prefix (suffix after client id; sequence appended)"
+	default "camera/photo/chunk"
+	depends on MQTT_SAMPLE_CAMERA
+
+config MQTT_CAMERA_ERROR_TOPIC
+	string "MQTT camera error publish topic (suffix after client id)"
+	default "camera/error"
+	depends on MQTT_SAMPLE_CAMERA
 
 module = MQTT_SAMPLE_TRANSPORT
 module-str = Transport

@@ -16,7 +16,7 @@
 # Env:
 #   INTEGRATION_ZEPHYR_BUILD_DIR  If set, pytest uses this build for .config and native_sim (overrides auto-detect)
 #   ZEPHYR_BUILD_DIR  Used when build-native-sim/app is missing; also exported for tools (default: build-native-sim/app)
-#   INTEGRATION_NATIVE_SIM_LOG  Optional path to write captured native_sim stdout (default: tests/integration/artifacts/native_sim_stdout.log)
+#   INTEGRATION_NATIVE_SIM_LOG  Optional path to write captured native_sim stdout
 #   SKIP_NATIVE_BUILD  If set to 1, skip `west build` (use existing build)
 #   INTEGRATION_NET_TOOLS_DIR  Directory containing net-setup.sh (overrides search). See https://github.com/zephyrproject-rtos/net-tools
 #   INTEGRATION_FETCH_NET_TOOLS  If 1 (or GITHUB_ACTIONS is set), clone net-tools into .integration-net-tools when missing

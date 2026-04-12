@@ -80,7 +80,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: firmware-log
-          path: nrf9151-connectkit/tests/integration/artifacts/native_sim_stdout.log
+          path: nrf9151-connectkit/tests/integration/artifacts/zephyr_simulator_log.txt
           if-no-files-found: ignore
 
       - name: Upload integration coverage HTML
