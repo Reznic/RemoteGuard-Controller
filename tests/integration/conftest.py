@@ -4,11 +4,21 @@
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 from typing import Any, Generator
 import pytest
 
 from broker_client import BrokerClient
+
+_SCRIPTS_DIR = Path(__file__).resolve().parent.parent.parent / "scripts"
+if _SCRIPTS_DIR.is_dir() and str(_SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPTS_DIR))
+
+from github_actions_summary import (  # type: ignore[import-untyped]
+    append_session_failure_details,
+    append_session_test_outcomes,
+)
 
 # TestReport / CollectReport do not expose .config in all pytest versions; stash
 # the active Config from pytest_configure for GitHub Actions summary hooks.
@@ -54,26 +64,12 @@ def pytest_collectreport(report: Any) -> None:
 
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
     summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
-    if not summary_path or exitstatus == 0:
+    if not summary_path:
         return
-    failures: list[tuple[str, str, str]] | None = getattr(
-        session.config, "_integration_github_failures", None
-    )
-    if not failures:
-        return
-    parts: list[str] = ["\n## Integration test failures\n\n"]
-    for nodeid, when, text in failures:
-        parts.append(f"### `{nodeid}` ({when})\n\n")
-        parts.append("```\n")
-        parts.append(text)
-        if not text.endswith("\n"):
-            parts.append("\n")
-        parts.append("```\n\n")
-    try:
-        with open(summary_path, "a", encoding="utf-8") as f:
-            f.write("".join(parts))
-    except OSError:
-        pass
+    sp = Path(summary_path)
+    append_session_test_outcomes(session, sp)
+    if exitstatus != 0:
+        append_session_failure_details(session, sp)
 
 from simulator_runner import SimulatorRunner
 
