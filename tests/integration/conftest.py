@@ -168,6 +168,17 @@ def mqtt_lwt_topic(kconfig: dict[str, str], integration_device_id: str) -> str:
     return kconfig_utils.mqtt_lwt_topic(integration_device_id, kconfig)
 
 
+@pytest.fixture(autouse=True)
+def _simulator_log_testname_tag(request: pytest.FixtureRequest) -> None:
+    """Tag test name inside the captured zephyr simulator log."""
+    if "dev_simulator" not in request.fixturenames:
+        return
+    simulator = request.getfixturevalue("dev_simulator")
+    bar = "=" * 30
+    test_start_mark = f"{bar}\nStarting: {request.node.name}\n{bar}\n"
+    simulator.inject_to_captured_log(test_start_mark)
+
+
 @pytest.fixture(scope="session")
 def dev_simulator(zephyr_build_dir: Path | None) -> Generator[SimulatorRunner, None, None]:
     """Runs zephyr device simulator on host using native_sim."""

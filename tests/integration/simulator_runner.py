@@ -32,8 +32,8 @@ class SimulatorRunner:
     def __init__(self, executable: Path) -> None:
         self._executable = executable
         self._proc: subprocess.Popen[str] | None = None
-        self._lines: list[str] = []
-        self._stdout_lock = threading.Lock()
+        self._log_lines: list[str] = []
+        self._log_reader_lock = threading.Lock()
         self._log_reader: threading.Thread | None = None
         self._log_file_path = native_sim_log_file_path()
 
@@ -96,7 +96,7 @@ class SimulatorRunner:
             self._close_proc_stdout()
             self._proc = None
         self._stop_log_reader()
-        self._lines.clear()
+        self._log_lines.clear()
         self.start()
 
     def stop_abrupt(self) -> None:
@@ -142,12 +142,17 @@ class SimulatorRunner:
         assert self._proc is not None
         assert self._proc.stdout is not None
         for line in self._proc.stdout:
-            with self._stdout_lock:
-                self._lines.append(line)
+            with self._log_reader_lock:
+                self._log_lines.append(line)
 
     def joined_output(self) -> str:
-        with self._stdout_lock:
-            return "".join(self._lines)
+        with self._log_reader_lock:
+            return "".join(self._log_lines)
+
+    def inject_to_captured_log(self, string: str) -> None:
+        """Append a string to captured stdout."""
+        with self._log_reader_lock:
+            self._log_lines.append(string)
 
     def wait_for_substring(self, needle: str, timeout: float = 120.0) -> None:
         deadline = time.monotonic() + timeout
