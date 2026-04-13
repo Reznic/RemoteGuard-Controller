@@ -126,16 +126,27 @@ class SimulatorRunner:
     def log_file_path(self) -> Path:
         return self._log_file_path
 
-    def find_error_logs(self) -> list[str]:
+    @classmethod
+    def find_error_logs_in_text(cls, text: str) -> list[str]:
         """Return stripped lines that contain Zephyr error-level log marker."""
         return [
             line.rstrip("\n\r")
-            for line in self.joined_output().splitlines()
-            if self.LOG_ERR_MARKER in line
+            for line in text.splitlines()
+            if cls.LOG_ERR_MARKER in line
         ]
 
-    def assert_no_error_logs(self) -> None:
-        """Fail the current test if the log contains any errors"""
-        error_logs = self.find_error_logs()
+    def find_error_logs(self) -> list[str]:
+        """Return stripped lines that contain Zephyr error-level log marker."""
+        return self.find_error_logs_in_text(self.joined_output())
+
+    def assert_no_error_logs(self, *, log_segment: str | None = None) -> None:
+        """Fail the current test if the log contains any errors.
+
+        If ``log_segment`` is set, only that substring is scanned (e.g. output
+        since the start of the current test). Otherwise the full captured log
+        is scanned.
+        """
+        text = self.joined_output() if log_segment is None else log_segment
+        error_logs = self.find_error_logs_in_text(text)
         if error_logs:
             pytest.fail("simulator log had errors:\n" + "\n".join(error_logs))

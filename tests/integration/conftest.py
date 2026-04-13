@@ -169,14 +169,23 @@ def mqtt_lwt_topic(kconfig: dict[str, str], integration_device_id: str) -> str:
 
 
 @pytest.fixture(autouse=True)
-def _simulator_log_testname_tag(request: pytest.FixtureRequest) -> None:
-    """Tag test name inside the captured zephyr simulator log."""
+def _simulator_per_test_log_checks(request: pytest.FixtureRequest) -> Generator[None, None, None]:
+    """Tag each test in the simulator log and assert no <err> lines for that test."""
     if "dev_simulator" not in request.fixturenames:
+        yield
         return
+
     simulator = request.getfixturevalue("dev_simulator")
     bar = "=" * 30
     test_start_mark = f"{bar}\nStarting: {request.node.name}\n{bar}\n"
     simulator.inject_to_captured_log(test_start_mark)
+    log_start_offset = len(simulator.joined_output())
+
+    yield
+
+    if not request.node.get_closest_marker("expect_errors_in_log"):
+        segment = simulator.joined_output()[log_start_offset:]
+        simulator.assert_no_error_logs(log_segment=segment)
 
 
 @pytest.fixture(scope="session")
@@ -206,7 +215,6 @@ def dev_simulator(zephyr_build_dir: Path | None) -> Generator[SimulatorRunner, N
         simulator_network_mock.unblock_zeth()
         simulator.stop()
         simulator_network_mock.stop()
-        simulator.assert_no_error_logs()
 
 
 @pytest.fixture

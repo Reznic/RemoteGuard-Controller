@@ -10,9 +10,9 @@ import pytest
 import simulator_network_mock
 from kconfig_utils import get_mqtt_keepalive_seconds, get_mqtt_lwt_will_message
 
-
 @pytest.mark.mqtt
 @pytest.mark.e2e
+@pytest.mark.expect_errors_in_log
 def test_abrupt_disconnect_notification(
     broker_client,
     dev_simulator,
