@@ -234,7 +234,7 @@ static int handle_get_location(void)
 	gnss_stop();
 
 	/* Publish GPS data */
-	// err = zbus_chan_pub(&GPS_DATA_CHAN, &gps, K_SECONDS(1));
+	err = zbus_chan_pub(&GPS_DATA_CHAN, &gps, K_SECONDS(1));
 	if (err) {
 		LOG_ERR("Failed to publish GPS data: %d", err);
 		return err;
