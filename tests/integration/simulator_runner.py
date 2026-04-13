@@ -96,7 +96,6 @@ class SimulatorRunner:
             self._close_proc_stdout()
             self._proc = None
         self._stop_log_reader()
-        self._log_lines.clear()
         self.start()
 
     def stop_abrupt(self) -> None:
