@@ -479,40 +479,40 @@ static int client_connect(struct mqtt_client_conn_params *conn_params)
 	mqtt_client.tx_buf	        = tx_buffer;
 	mqtt_client.tx_buf_size	        = sizeof(tx_buffer);
 
-#if defined(CONFIG_MQTT_CLIENT_LAST_WILL)
-#ifdef CONFIG_MQTT_CLIENT_LAST_WILL_TOPIC_PREFIX_DEVICE_ID
-	static char last_will_topic_buf[CONFIG_MQTT_CLIENT_LAST_WILL_TOPIC_BUF_SIZE];
-#endif
-	static struct mqtt_topic last_will_topic;
-	static struct mqtt_utf8 last_will_message = {
-		.utf8 = CONFIG_MQTT_CLIENT_LAST_WILL_MESSAGE,
-		.size = sizeof(CONFIG_MQTT_CLIENT_LAST_WILL_MESSAGE) - 1
-	};
+// #if defined(CONFIG_MQTT_CLIENT_LAST_WILL)
+// #ifdef CONFIG_MQTT_CLIENT_LAST_WILL_TOPIC_PREFIX_DEVICE_ID
+// 	static char last_will_topic_buf[CONFIG_MQTT_CLIENT_LAST_WILL_TOPIC_BUF_SIZE];
+// #endif
+// 	static struct mqtt_topic last_will_topic;
+// 	static struct mqtt_utf8 last_will_message = {
+// 		.utf8 = CONFIG_MQTT_CLIENT_LAST_WILL_MESSAGE,
+// 		.size = sizeof(CONFIG_MQTT_CLIENT_LAST_WILL_MESSAGE) - 1
+// 	};
 
-	if (IS_ENABLED(CONFIG_MQTT_CLIENT_LAST_WILL_TOPIC_PREFIX_DEVICE_ID)) {
-		int n;
+// 	if (IS_ENABLED(CONFIG_MQTT_CLIENT_LAST_WILL_TOPIC_PREFIX_DEVICE_ID)) {
+// 		int n;
 
-		n = snprintf(last_will_topic_buf, sizeof(last_will_topic_buf), "%.*s/%s",
-			     (int)conn_params->device_id.size, conn_params->device_id.ptr,
-			     CONFIG_MQTT_CLIENT_LAST_WILL_TOPIC);
-		if (n < 0 || n >= (int)sizeof(last_will_topic_buf)) {
-			LOG_ERR("Last will topic does not fit in buffer (ret=%d)", n);
-			return -ENOBUFS;
-		}
+// 		n = snprintf(last_will_topic_buf, sizeof(last_will_topic_buf), "%.*s/%s",
+// 			     (int)conn_params->device_id.size, conn_params->device_id.ptr,
+// 			     CONFIG_MQTT_CLIENT_LAST_WILL_TOPIC);
+// 		if (n < 0 || n >= (int)sizeof(last_will_topic_buf)) {
+// 			LOG_ERR("Last will topic does not fit in buffer (ret=%d)", n);
+// 			return -ENOBUFS;
+// 		}
 
-		last_will_topic.topic.utf8 = last_will_topic_buf;
-		last_will_topic.topic.size = (size_t)n;
-	} else {
-		last_will_topic.topic.utf8 = CONFIG_MQTT_CLIENT_LAST_WILL_TOPIC;
-		last_will_topic.topic.size = sizeof(CONFIG_MQTT_CLIENT_LAST_WILL_TOPIC) - 1;
-	}
+// 		last_will_topic.topic.utf8 = last_will_topic_buf;
+// 		last_will_topic.topic.size = (size_t)n;
+// 	} else {
+// 		last_will_topic.topic.utf8 = CONFIG_MQTT_CLIENT_LAST_WILL_TOPIC;
+// 		last_will_topic.topic.size = sizeof(CONFIG_MQTT_CLIENT_LAST_WILL_TOPIC) - 1;
+// 	}
 
-	last_will_topic.qos = MQTT_QOS_0_AT_MOST_ONCE;
+// 	last_will_topic.qos = MQTT_QOS_0_AT_MOST_ONCE;
 
-	// mqtt_client.will_topic = &last_will_topic;
-	// mqtt_client.will_message = &last_will_message;
-	// mqtt_client.will_retain = 1U;
-#endif
+// 	mqtt_client.will_topic = &last_will_topic;
+// 	mqtt_client.will_message = &last_will_message;
+// 	mqtt_client.will_retain = 1U;
+// #endif
 
 #if defined(CONFIG_MQTT_LIB_TLS)
 	mqtt_client.transport.type      = MQTT_TRANSPORT_SECURE;
