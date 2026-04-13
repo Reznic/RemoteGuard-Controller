@@ -76,50 +76,6 @@ class SimulatorRunner:
             except OSError:
                 pass
 
-    def _stop_log_reader(self, timeout: float = 15.0) -> None:
-        if self._log_reader is None:
-            return
-        # The reader blocks on iterating stdout; closing the pipe wakes it up (EOF / error).
-        self._close_proc_stdout()
-        self._log_reader.join(timeout=timeout)
-        self._log_reader = None
-
-    def reset(self) -> None:
-        """Restart native_sim.
-
-        Clears captured stdout, spawns a new process.
-        """
-        if self._proc is not None and self._proc.poll() is None:
-            self.stop()
-        elif self._proc is not None:
-            # Already dead (e.g. stop_abrupt) but ensure pipes are closed before join.
-            self._close_proc_stdout()
-            self._proc = None
-        self._stop_log_reader()
-        self.start()
-
-    def stop_abrupt(self) -> None:
-        """Kill the simulator with SIGKILL (no graceful SIGINT). Used for LWT abrupt-disconnect tests."""
-        if self._proc is None:
-            return
-        # Flush captured stdout to file.
-        time.sleep(0.5)
-        try:
-            self._log_file_path.write_text(self.joined_output(), encoding="utf-8")
-        except OSError:
-            pass
-        try:
-            self._proc.kill()
-        except OSError:
-            pass
-        try:
-            self._proc.wait(timeout=15.0)
-        except subprocess.TimeoutExpired:
-            pass
-        self._close_proc_stdout()
-        self._proc = None
-        self._log_file_path.write_text(self.joined_output(), encoding="utf-8")
-
     def stop(self) -> None:
         if self._proc is None:
             return

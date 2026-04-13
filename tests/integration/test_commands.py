@@ -3,6 +3,8 @@ from __future__ import annotations
 import json
 import pytest
 
+pytestmark = [pytest.mark.usefixtures("network")]
+
 
 @pytest.mark.mqtt
 @pytest.mark.e2e

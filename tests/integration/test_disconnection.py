@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import pytest
 
+import simulator_network_mock
 from kconfig_utils import get_mqtt_keepalive_seconds, get_mqtt_lwt_will_message
 
 
@@ -39,18 +40,19 @@ def test_abrupt_disconnect_notification(
     else:
         pytest.fail(f"Received a device disconnect message on the LWT topic before the simulator was stopped.\n{msg!r}")
 
+    msg = None
     try:
-        dev_simulator.stop_abrupt()
+        # Simulate a network disconnection by blocking simulator's network interface.
+        simulator_network_mock.block_zeth()
         msg = broker_client.wait_for_message_on_topic(mqtt_lwt_topic, timeout=timeout)
-
     except TimeoutError as e:
         pytest.fail(
             f"Failed to get notification on device abrupt disconnect.\n"
             f"Timeout waiting for broker LWT on {mqtt_lwt_topic!r}: {e}"
         )
-
     finally:
-        # Restore device simulator session
-        dev_simulator.reset()
+        simulator_network_mock.unblock_zeth()
 
     assert msg == expected_disconnect_msg, f"Expected LWT payload {expected_disconnect_msg!r}, got {msg!r}"
+
+    #Todo: Verify that the device is able to reconnect to mqtt broker.

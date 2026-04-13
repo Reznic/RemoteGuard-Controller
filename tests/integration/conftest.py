@@ -71,9 +71,9 @@ def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
     if exitstatus != 0:
         append_session_failure_details(session, sp)
 
-from simulator_runner import SimulatorRunner
-
 import kconfig_utils
+import simulator_network_mock
+from simulator_runner import SimulatorRunner
 
 from kconfig_utils import (
     find_native_sim_executable,
@@ -186,15 +186,33 @@ def dev_simulator(zephyr_build_dir: Path | None) -> Generator[SimulatorRunner, N
     if exe is None:
         pytest.fail(f"No native_sim executable under {zephyr_build_dir / 'zephyr'!s}")
 
-    dut = SimulatorRunner(exe)
-    
-    try:
-        dut.start(boot_timeout=30.0)
-        yield dut
+    simulator = SimulatorRunner(exe)
 
+    try:
+        simulator_network_mock.start()
     except Exception as e:
+        pytest.fail(f"simulator network (Host NAT) setup failed: {e}")
+
+    try:
+        simulator.start(boot_timeout=30.0)
+    except Exception as e:
+        simulator_network_mock.unblock_zeth()
+        simulator_network_mock.stop()
         pytest.fail(f"Failed to start zephyr device simulator: {e}")
 
+    try:
+        yield simulator
     finally:
-        dut.stop()
-        dut.assert_no_error_logs()
+        simulator_network_mock.unblock_zeth()
+        simulator.stop()
+        simulator_network_mock.stop()
+        simulator.assert_no_error_logs()
+
+
+@pytest.fixture
+def network() -> Generator[None, None, None]:
+    """Ensure host NAT is active and zeth is not partitioned (omit in LWT/disconnect tests)."""
+    simulator_network_mock.ensure_started()
+    simulator_network_mock.unblock_zeth()
+    yield
+    simulator_network_mock.unblock_zeth()
