@@ -103,6 +103,12 @@ class SimulatorRunner:
         """Kill the simulator with SIGKILL (no graceful SIGINT). Used for LWT abrupt-disconnect tests."""
         if self._proc is None:
             return
+        # Flush captured stdout to file.
+        time.sleep(0.5)
+        try:
+            self._log_file_path.write_text(self.joined_output(), encoding="utf-8")
+        except OSError:
+            pass
         try:
             self._proc.kill()
         except OSError:
