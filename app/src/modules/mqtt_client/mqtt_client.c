@@ -509,9 +509,9 @@ static int client_connect(struct mqtt_client_conn_params *conn_params)
 
 	last_will_topic.qos = MQTT_QOS_0_AT_MOST_ONCE;
 
-	mqtt_client.will_topic = &last_will_topic;
-	mqtt_client.will_message = &last_will_message;
-	mqtt_client.will_retain = 1U;
+	// mqtt_client.will_topic = &last_will_topic;
+	// mqtt_client.will_message = &last_will_message;
+	// mqtt_client.will_retain = 1U;
 #endif
 
 #if defined(CONFIG_MQTT_LIB_TLS)
