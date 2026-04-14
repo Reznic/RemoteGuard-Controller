@@ -1,10 +1,9 @@
-# Copyright (c) Nordic Semiconductor ASA
-# SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
-
+"""Integration tests configuration and fixtures."""
 from __future__ import annotations
 
 import os
 import sys
+from time import sleep
 from pathlib import Path
 from typing import Any, Generator
 import pytest
@@ -208,6 +207,9 @@ def dev_simulator(zephyr_build_dir: Path | None) -> Generator[SimulatorRunner, N
         simulator_network_mock.unblock_zeth()
         simulator_network_mock.stop()
         pytest.fail(f"Failed to start zephyr device simulator: {e}")
+
+    sleep(1.0)
+    simulator.assert_no_error_logs()
 
     try:
         yield simulator
