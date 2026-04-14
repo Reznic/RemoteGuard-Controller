@@ -13,11 +13,11 @@ from kconfig_utils import get_mqtt_keepalive_seconds, get_mqtt_lwt_will_message
 @pytest.mark.mqtt
 @pytest.mark.e2e
 @pytest.mark.expect_errors_in_log
-def test_abrupt_disconnect_notification(broker_client, dev_simulator, mqtt_lwt_topic, kconfig):
+def test_disconnect_and_reconnect_notification(broker_client, dev_simulator, mqtt_lwt_topic, kconfig):
     """Test reception of device connection/disconnection messages over mqtt LWT topic."""
     if kconfig.get("CONFIG_MQTT_CLIENT_LAST_WILL") != "y":
         pytest.skip("CONFIG_MQTT_CLIENT_LAST_WILL is not enabled in this build")
-    
+
     device_keepalive = get_mqtt_keepalive_seconds(kconfig)
     timeout = float(max(45, device_keepalive * 2 + 20))
     expected_disconnect_msg = get_mqtt_lwt_will_message(kconfig).encode("utf-8")
