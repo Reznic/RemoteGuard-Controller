@@ -122,6 +122,7 @@ static void on_mqtt_connack(enum mqtt_conn_return_code return_code, bool session
 		LOG_INF("MQTT CONNACK: %s (session_present=%d)",
 			mqtt_connack_reason_str(return_code), session_present);
 		atomic_set(&transport_mqtt_connected, 1);
+		(void)transport_mqtt_publish_lwt_online();
 		smf_set_state(SMF_CTX(&s_obj), &state[MQTT_CONNECTED]);
 	} else {
 		LOG_ERR("MQTT CONNACK refused: %s (0x%02x), session_present=%d",
@@ -635,6 +636,20 @@ static void transport_task(void)
 }
 
 #if defined(CONFIG_MQTT_CLIENT_LAST_WILL)
+int transport_mqtt_publish_lwt_online(void)
+{
+	int err;
+
+	err = mqtt_client_publish_str_with_qos(lwt_topic, "online", MQTT_QOS_1_AT_LEAST_ONCE,
+					       /*retain*/ true, /*dup*/ false);
+	if (err) {
+		LOG_ERR("Failed to publish online on LWT topic: %d", err);
+		return err;
+	}
+
+	return 0;
+}
+
 int transport_mqtt_clean_offline(void)
 {
 	int err;
@@ -660,6 +675,11 @@ int transport_mqtt_clean_offline(void)
 	return 0;
 }
 #else
+int transport_mqtt_publish_lwt_online(void)
+{
+	return -ENOTSUP;
+}
+
 int transport_mqtt_clean_offline(void)
 {
 	return -ENOTSUP;
