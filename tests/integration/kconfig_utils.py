@@ -82,6 +82,26 @@ def get_mqtt_gps_data_suffix(cfg: dict[str, str]) -> str:
     return cfg.get("CONFIG_MQTT_GPS_DATA_TOPIC", "device/gps")
 
 
+def mqtt_lwt_topic(device_id: str, cfg: dict[str, str]) -> str:
+    """Mirror mqtt_client LWT topic: prefix with device id when PREFIX_DEVICE_ID is enabled."""
+    suffix = cfg.get("CONFIG_MQTT_CLIENT_LAST_WILL_TOPIC", "lwt")
+    if cfg.get("CONFIG_MQTT_CLIENT_LAST_WILL_TOPIC_PREFIX_DEVICE_ID", "y") == "y":
+        return full_topic(device_id, suffix)
+    return suffix
+
+
+def get_mqtt_lwt_will_message(cfg: dict[str, str]) -> str:
+    return cfg.get("CONFIG_MQTT_CLIENT_LAST_WILL_MESSAGE", "offline_unexpected")
+
+
+def get_mqtt_keepalive_seconds(cfg: dict[str, str]) -> int:
+    raw = cfg.get("CONFIG_MQTT_KEEPALIVE", "60")
+    try:
+        return int(raw, 10)
+    except ValueError:
+        return 60
+
+
 def find_native_sim_executable(build_dir: Path) -> Optional[Path]:
     """Return the native_sim host runner under zephyr/ (Linux or Windows name)."""
     for name in ("zephyr", "zephyr.exe"):

@@ -31,7 +31,7 @@ static const unsigned char private_key[] = {
 #endif
 };
 
-#if CONFIG_MQTT_HELPER_SECONDARY_SEC_TAG != -1
+#if CONFIG_MQTT_CLIENT_SECONDARY_SEC_TAG != -1
 
 static const unsigned char ca_certificate_2[] = {
 #if __has_include("ca-cert-2.pem")
@@ -57,14 +57,14 @@ static const unsigned char device_certificate_2[] = {
 #endif
 };
 
-#endif /* CONFIG_MQTT_HELPER_SECONDARY_SEC_TAG != -1 */
+#endif /* CONFIG_MQTT_CLIENT_SECONDARY_SEC_TAG != -1 */
 
 static int credentials_provision(void)
 {
 	int err = 0;
 
 	if (sizeof(ca_certificate) > 1) {
-		err = modem_key_mgmt_write(CONFIG_MQTT_HELPER_SEC_TAG,
+		err = modem_key_mgmt_write(CONFIG_MQTT_CLIENT_SEC_TAG,
 					   MODEM_KEY_MGMT_CRED_TYPE_CA_CHAIN,
 					   ca_certificate,
 					   sizeof(ca_certificate) - 1);
@@ -74,7 +74,7 @@ static int credentials_provision(void)
 	}
 
 	if (sizeof(device_certificate) > 1) {
-		err = modem_key_mgmt_write(CONFIG_MQTT_HELPER_SEC_TAG,
+		err = modem_key_mgmt_write(CONFIG_MQTT_CLIENT_SEC_TAG,
 					   MODEM_KEY_MGMT_CRED_TYPE_PUBLIC_CERT,
 					   device_certificate,
 					   sizeof(device_certificate) - 1);
@@ -84,7 +84,7 @@ static int credentials_provision(void)
 	}
 
 	if (sizeof(private_key) > 1) {
-		err = modem_key_mgmt_write(CONFIG_MQTT_HELPER_SEC_TAG,
+		err = modem_key_mgmt_write(CONFIG_MQTT_CLIENT_SEC_TAG,
 					   MODEM_KEY_MGMT_CRED_TYPE_PRIVATE_CERT,
 					   private_key,
 					   sizeof(private_key) - 1);
@@ -95,10 +95,10 @@ static int credentials_provision(void)
 
 	/* Secondary security tag entries. */
 
-#if CONFIG_MQTT_HELPER_SECONDARY_SEC_TAG != -1
+#if CONFIG_MQTT_CLIENT_SECONDARY_SEC_TAG != -1
 
 	if (sizeof(ca_certificate_2) > 1) {
-		err = modem_key_mgmt_write(CONFIG_MQTT_HELPER_SECONDARY_SEC_TAG,
+		err = modem_key_mgmt_write(CONFIG_MQTT_CLIENT_SECONDARY_SEC_TAG,
 					   MODEM_KEY_MGMT_CRED_TYPE_CA_CHAIN,
 					   ca_certificate_2,
 					   sizeof(ca_certificate_2) - 1);
@@ -108,7 +108,7 @@ static int credentials_provision(void)
 	}
 
 	if (sizeof(device_certificate_2) > 1) {
-		err = modem_key_mgmt_write(CONFIG_MQTT_HELPER_SECONDARY_SEC_TAG,
+		err = modem_key_mgmt_write(CONFIG_MQTT_CLIENT_SECONDARY_SEC_TAG,
 					   MODEM_KEY_MGMT_CRED_TYPE_PUBLIC_CERT,
 					   device_certificate_2,
 					   sizeof(device_certificate_2) - 1);
@@ -118,7 +118,7 @@ static int credentials_provision(void)
 	}
 
 	if (sizeof(private_key_2) > 1) {
-		err = modem_key_mgmt_write(CONFIG_MQTT_HELPER_SECONDARY_SEC_TAG,
+		err = modem_key_mgmt_write(CONFIG_MQTT_CLIENT_SECONDARY_SEC_TAG,
 					   MODEM_KEY_MGMT_CRED_TYPE_PRIVATE_CERT,
 					   private_key_2,
 					   sizeof(private_key_2) - 1);
@@ -127,7 +127,7 @@ static int credentials_provision(void)
 		}
 	}
 
-#endif /* CONFIG_MQTT_HELPER_SECONDARY_SEC_TAG != -1 */
+#endif /* CONFIG_MQTT_CLIENT_SECONDARY_SEC_TAG != -1 */
 
 	return err;
 }

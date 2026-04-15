@@ -7,21 +7,19 @@
 # On Ubuntu/Debian, install: sudo apt install gcc-multilib libc6-dev-i386 libcap2-bin iptables
 #
 # native_sim + ETH_NATIVE_POSIX: the host TAP (zeth) must exist before the simulator runs.
-# net-setup.sh creates zeth; this script also enables IPv4 forwarding + iptables MASQUERADE
-# from zeth to the default route (NAT) so the DUT can use broker.hivemq.com and public DNS.
-# Teardown runs NAT removal then net-setup stop. Optional setcap on the zephyr binary.
+# net-setup.sh creates zeth. IPv4 NAT (MASQUERADE + FORWARD) is applied by pytest (tests/integration/simulator_network_mock.py).
+# Teardown runs net-setup stop. Optional setcap on the zephyr binary.
 #
 # Usage (from nrf9151-connectkit repo root):
 #   ./scripts/run_integration_tests.sh
 # Env:
 #   INTEGRATION_ZEPHYR_BUILD_DIR  If set, pytest uses this build for .config and native_sim (overrides auto-detect)
 #   ZEPHYR_BUILD_DIR  Used when build-native-sim/app is missing; also exported for tools (default: build-native-sim/app)
-#   INTEGRATION_NATIVE_SIM_LOG  Optional path to write captured native_sim stdout (default: tests/integration/artifacts/native_sim_stdout.log)
+#   INTEGRATION_NATIVE_SIM_LOG  Optional path to write captured native_sim stdout
 #   SKIP_NATIVE_BUILD  If set to 1, skip `west build` (use existing build)
 #   INTEGRATION_NET_TOOLS_DIR  Directory containing net-setup.sh (overrides search). See https://github.com/zephyrproject-rtos/net-tools
 #   INTEGRATION_FETCH_NET_TOOLS  If 1 (or GITHUB_ACTIONS is set), clone net-tools into .integration-net-tools when missing
 #   SKIP_NET_SETUP  If 1, do not run net-setup.sh (only setcap / manual TAP setup)
-#   SKIP_NAT  If 1, do not enable IPv4 MASQUERADE / forwarding for zeth (public MQTT/DNS will not work from the DUT)
 #   GCOV_EXE  Optional gcov binary for gcovr when it does not match the native_sim compiler (rare; Ubuntu host gcc is usually fine).
 
 set -euo pipefail
@@ -125,55 +123,7 @@ integration_net_setup_start() {
 	NET_SETUP_ACTIVE=1
 }
 
-# IPv4 NAT: forward + MASQUERADE zeth -> default WAN so the DUT can reach broker.hivemq.com and DNS.
-NAT_ACTIVE=0
-NAT_WAN=""
-IPV4_FORWARD_PREV=""
-
-integration_nat_start() {
-	NAT_WAN=$(ip -4 route show default 2>/dev/null | awk '/default/ { for (i = 1; i <= NF; i++) if ($i == "dev") { print $(i + 1); exit } }')
-	if [[ -z "${NAT_WAN}" ]]; then
-		NAT_WAN=$(ip route show default 2>/dev/null | awk '{ print $5; exit }')
-	fi
-	if [[ -z "${NAT_WAN}" ]]; then
-		echo "error: could not detect default route interface (needed for NAT)" >&2
-		exit 1
-	fi
-
-	if ! command -v iptables >/dev/null 2>&1; then
-		echo "error: iptables not found. Install: sudo apt install iptables" >&2
-		exit 1
-	fi
-
-	IPV4_FORWARD_PREV=$(cat /proc/sys/net/ipv4/ip_forward)
-	echo 1 | sudo tee /proc/sys/net/ipv4/ip_forward >/dev/null
-	# Loose forwarding from TAP (avoids drops when strict rp_filter is on).
-	sudo sysctl -q -w net.ipv4.conf.zeth.rp_filter=0 2>/dev/null || true
-
-	sudo iptables -t nat -A POSTROUTING -o "${NAT_WAN}" -j MASQUERADE
-	sudo iptables -A FORWARD -i zeth -o "${NAT_WAN}" -j ACCEPT
-	sudo iptables -A FORWARD -i "${NAT_WAN}" -o zeth -m state --state RELATED,ESTABLISHED -j ACCEPT
-
-	NAT_ACTIVE=1
-}
-
-integration_nat_stop() {
-	if [[ "${NAT_ACTIVE:-0}" -ne 1 ]]; then
-		return 0
-	fi
-	if [[ -n "${NAT_WAN}" ]]; then
-		sudo iptables -t nat -D POSTROUTING -o "${NAT_WAN}" -j MASQUERADE 2>/dev/null || true
-		sudo iptables -D FORWARD -i zeth -o "${NAT_WAN}" -j ACCEPT 2>/dev/null || true
-		sudo iptables -D FORWARD -i "${NAT_WAN}" -o zeth -m state --state RELATED,ESTABLISHED -j ACCEPT 2>/dev/null || true
-	fi
-	if [[ -n "${IPV4_FORWARD_PREV}" ]]; then
-		echo "${IPV4_FORWARD_PREV}" | sudo tee /proc/sys/net/ipv4/ip_forward >/dev/null
-	fi
-	NAT_ACTIVE=0
-}
-
 integration_cleanup() {
-	integration_nat_stop
 	integration_net_setup_stop
 }
 
@@ -183,10 +133,6 @@ if [[ "${SKIP_NET_SETUP:-0}" != "1" ]]; then
 	integration_net_setup_start
 else
 	NET_TOOLS_DIR=""
-fi
-
-if [[ "${SKIP_NET_SETUP:-0}" != "1" ]] && [[ "${SKIP_NAT:-0}" != "1" ]]; then
-	integration_nat_start
 fi
 
 # TAP/zeth: optional capabilities on the zephyr binary (supplement to net-setup).
