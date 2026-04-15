@@ -116,7 +116,7 @@ if MQTT_CLIENT_LAST_WILL
 
 config MQTT_CLIENT_LAST_WILL_MESSAGE
 	string "Last will message"
-	default "{\"lastwill\": \"offline\"}"
+	default CONNECTION_STATUS_OFFLINE_UNEXPECTED_MSG
 
 config MQTT_CLIENT_LAST_WILL_TOPIC
 	string "Last will topic"

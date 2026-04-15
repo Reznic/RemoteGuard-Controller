@@ -31,8 +31,6 @@ def test_disconnect_and_reconnect_notification(broker_client, dev_simulator, mqt
         msg = broker_client.wait_for_message_on_topic(mqtt_lwt_topic, timeout=timeout)
     except TimeoutError:
         pass  # Expected: no disconnect message.
-    except Exception as e:
-        pytest.fail(f"Error waiting for device disconnect message on the LWT topic: {e}")
     else:
         pytest.fail(f"Received a device disconnect message on the LWT topic before the simulator was stopped.\n{msg!r}")
 

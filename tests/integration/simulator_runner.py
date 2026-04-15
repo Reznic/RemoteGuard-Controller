@@ -25,8 +25,8 @@ def native_sim_log_file_path() -> Path:
 
 
 class SimulatorRunner:
-    APP_BOOT_MSG = "Booting nRF Connect"
-    MQTT_CONNECTED_MSG = "Connected to MQTT broker"
+    APP_BOOT_LOG_LINE = "Booting nRF Connect"
+    MQTT_CONNECTED_LOG_LINE = "Connected to MQTT broker"
     LOG_ERR_MARKER = "<err>"
 
     def __init__(self, executable: Path) -> None:
@@ -56,13 +56,13 @@ class SimulatorRunner:
 
     def wait_for_bootup(self, timeout: float = 30.0) -> None:
         try:
-            self.wait_for_substring(self.APP_BOOT_MSG, timeout)
+            self.wait_for_substring(self.APP_BOOT_LOG_LINE, timeout)
         except TimeoutError as e:
             pytest.fail(f"Zephyr app did not boot on simulator: {e}")
 
     def wait_for_mqtt_connection(self, timeout: float = 120.0) -> None:
         try:
-            self.wait_for_substring(self.MQTT_CONNECTED_MSG, timeout)
+            self.wait_for_substring(self.MQTT_CONNECTED_LOG_LINE, timeout)
         except TimeoutError as e:
             pytest.fail(f"App failed to connect to mqtt broker: {e}")
 

@@ -92,6 +92,22 @@ config MQTT_CAMERA_ERROR_TOPIC
 	default "camera/error"
 	depends on MQTT_SAMPLE_CAMERA
 
+if MQTT_CLIENT_LAST_WILL
+
+config CONNECTION_STATUS_ONLINE_MSG
+	string "MQTT retained status payload: device online (published on connect)"
+	default "online"
+
+config CONNECTION_STATUS_OFFLINE_CLEAN_MSG
+	string "MQTT retained status payload: clean disconnect (published before sleep)"
+	default "offline_clean"
+
+config CONNECTION_STATUS_OFFLINE_UNEXPECTED_MSG
+	string "MQTT retained status payload: unexpected disconnect (last will message)"
+	default "offline_unexpected"
+
+endif # MQTT_CLIENT_LAST_WILL
+
 module = MQTT_SAMPLE_TRANSPORT
 module-str = Transport
 source "subsys/logging/Kconfig.template.log_config"

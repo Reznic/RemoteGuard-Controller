@@ -168,23 +168,24 @@ def mqtt_lwt_topic(kconfig: dict[str, str], integration_device_id: str) -> str:
 
 
 @pytest.fixture(autouse=True)
-def _simulator_per_test_log_checks(request: pytest.FixtureRequest) -> Generator[None, None, None]:
+def _pre_and_post_test_actions(request: pytest.FixtureRequest) -> Generator[None, None, None]:
     """Tag each test in the simulator log and assert no <err> lines for that test."""
     if "dev_simulator" not in request.fixturenames:
         yield
         return
 
+    # Mark the current test name in the zephyr simulator log.
     simulator = request.getfixturevalue("dev_simulator")
-    bar = "=" * 30
-    test_start_mark = f"{bar}\nStarting: {request.node.name}\n{bar}\n"
-    simulator.inject_to_captured_log(test_start_mark)
-    log_start_offset = len(simulator.joined_output())
+    test_start_log_mark = f"{'='*30}\nStarting: {request.node.name}\n{'='*30}\n"
+    simulator.inject_to_captured_log(test_start_log_mark)
+    current_test_log_offset = len(simulator.joined_output())
 
     yield
 
+    # Get the zephyr simulator log of the current test.
+    current_test_log = simulator.joined_output()[current_test_log_offset:]
     if not request.node.get_closest_marker("expect_errors_in_log"):
-        segment = simulator.joined_output()[log_start_offset:]
-        simulator.assert_no_error_logs(log_segment=segment)
+        simulator.assert_no_error_logs(log_segment=current_test_log)
 
 
 @pytest.fixture(scope="session")
